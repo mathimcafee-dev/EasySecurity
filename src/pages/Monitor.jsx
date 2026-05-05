@@ -75,22 +75,33 @@ export default function Monitor() {
     setScanning(s => ({ ...s, [domain]: true }))
     try {
       const d = domain.replace(/^https?:\/\//, '').replace(/\/.*$/, '')
-      const res = await dnsLookup(d, 'A')
-      const risk = res.status === 0 ? 'SECURE' : 'MEDIUM'
-      const daysLeft = 90
-      const certStart = certs[0]?.notBefore ? new Date(certs[0].notBefore) : null
-      const certExpiry = certs[0]?.notAfter ? new Date(certs[0].notAfter) : null
-      await supabase.from('ec_monitored_domains').update({ 
-        last_scanned_at: new Date().toISOString(), 
-        last_risk_level: risk, last_score: 85, last_days_left: daysLeft, 
-        last_algorithm: certs[0]?.sigAlgo || 'RSA-2048 / SHA-256',
+      // Call real TLS scanner to get actual certificate data
+      const res = await fetch('https://zwgdpsuvduexcdzcwjau.supabase.co/functions/v1/tls-scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: d })
+      })
+      const data = await res.json()
+      const cert = data.certs?.[0]
+      const daysLeft = cert?.daysLeft ?? 0
+      const certStart = cert?.notBefore ? new Date(cert.notBefore) : null
+      const certExpiry = cert?.notAfter ? new Date(cert.notAfter) : null
+      const risk = daysLeft <= 0 ? 'CRITICAL' : daysLeft <= 7 ? 'CRITICAL' : daysLeft <= 15 ? 'HIGH' : daysLeft <= 30 ? 'MEDIUM' : 'SECURE'
+      const score = Math.min(100, Math.max(0, daysLeft))
+      const algorithm = cert?.sigAlgo || cert?.keyType || 'RSA-2048'
+      await supabase.from('ec_monitored_domains').update({
+        last_scanned_at: new Date().toISOString(),
+        last_risk_level: risk,
+        last_score: score,
+        last_days_left: daysLeft,
+        last_algorithm: algorithm,
         cert_start: certStart?.toISOString() || null,
         cert_expiry: certExpiry?.toISOString() || null
       }).eq('user_id', user.id).eq('domain', d)
-      await supabase.from('ec_scan_history').insert({ user_id: user.id, domain: d, risk_level: risk, score: 85, days_left: daysLeft, common_name: d })
+      await supabase.from('ec_scan_history').insert({ user_id: user.id, domain: d, risk_level: risk, score, days_left: daysLeft, common_name: cert?.commonName || d })
       await load()
-      if (daysLeft < 30) setAlerts(a => [...a, { id: Date.now(), msg: `${d} expires in ${daysLeft} days`, risk: daysLeft < 7 ? 'CRITICAL' : 'HIGH' }])
-    } catch {}
+      if (daysLeft >= 0 && daysLeft < 30) setAlerts(a => [...a, { id: Date.now(), msg: `${d} expires in ${daysLeft} days`, risk: daysLeft < 7 ? 'CRITICAL' : 'HIGH' }])
+    } catch(e) { console.error('Scan error:', e) }
     setScanning(s => { const n = { ...s }; delete n[domain]; return n })
   }
 
