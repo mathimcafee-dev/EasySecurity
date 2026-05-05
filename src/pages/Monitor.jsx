@@ -38,7 +38,20 @@ export default function Monitor() {
   const [scanning, setScanning] = useState({})
   const [alerts, setAlerts] = useState([])
 
-  useEffect(() => { if (user) load() }, [user])
+  useEffect(() => { if (user) { load(); sendWelcomeEmail() } }, [user])
+
+  const SUPABASE_URL = 'https://zwgdpsuvduexcdzcwjau.supabase.co'
+
+  const sendWelcomeEmail = async () => {
+    const key = 'ec_welcome_sent_' + user?.id
+    if (localStorage.getItem(key)) return
+    localStorage.setItem(key, '1')
+    await fetch(SUPABASE_URL + '/functions/v1/send-notification', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'welcome', to: user.email })
+    }).catch(() => {})
+  }
 
   const load = async () => {
     setFetching(true)

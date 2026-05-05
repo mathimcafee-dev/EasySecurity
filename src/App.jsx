@@ -11,6 +11,7 @@ import Compare from './pages/Compare'
 import RenewWizard from './pages/Renew'
 import Monitor from './pages/Monitor'
 import { APIKeys, Docs } from './pages/APIAndDocs'
+import Notifications from './pages/Notifications'
 import About from './pages/About'
 
 function NotFound() {
@@ -42,6 +43,7 @@ export default function App() {
             <Route path="/api-keys" element={<APIKeys />} />
             <Route path="/docs" element={<Docs />} />
             <Route path="/about" element={<About />} />
+            <Route path="/notifications" element={<Notifications />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>

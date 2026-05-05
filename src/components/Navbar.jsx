@@ -24,7 +24,7 @@ export default function Navbar() {
       </a>
 
       <div className="nav-links">
-        {[['/', 'Scanner'], ['/decode', 'Decode CSR'], ['/match', 'Key Match'], ['/convert', 'Convert'], ['/dns', 'DNS'], ['/compare', 'Compare'], ['/renew', 'Renew'], ['/monitor', 'Monitor'], ['/api-keys', 'API'], ['/docs', 'Docs'], ['/about', 'About']].map(([path, label]) => (
+        {[['/', 'Scanner'], ['/decode', 'Decode CSR'], ['/match', 'Key Match'], ['/convert', 'Convert'], ['/dns', 'DNS'], ['/compare', 'Compare'], ['/renew', 'Renew'], ['/monitor', 'Monitor'], ['/api-keys', 'API'], ['/docs', 'Docs'], ['/notifications', '🔔 Alerts'], ['/about', 'About']].map(([path, label]) => (
           <button key={path} className={active(path)} onClick={() => nav(path)}>{label}</button>
         ))}
       </div>
