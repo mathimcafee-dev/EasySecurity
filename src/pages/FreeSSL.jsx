@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { downloadText } from '../lib/pki'
+import { supabase } from '../lib/supabase'
 
 const ACME_FN = '/api/acme'
 const VERSION = 'v9'
@@ -336,21 +337,19 @@ export default function FreeSSL() {
             <button className="btn btn-secondary" onClick={() => window.open('/convert','_blank')}>🔄 Convert to PFX/JKS</button>
             <button className="btn btn-secondary" onClick={async () => {
               try {
-                const { createClient } = await import('@supabase/supabase-js')
-                const sb = createClient('https://zwgdpsuvduexcdzcwjau.supabase.co', 'sb_publishable_LjJRTW4MzILBKhko01qXZQ_4j4gDmkM')
-                const { data: { user } } = await sb.auth.getUser()
+                const { data: { user } } = await supabase.auth.getUser()
                 if (!user) { window.open('/monitor', '_blank'); return }
-                const { error } = await sb.from('ec_monitored_domains').upsert({
+                const { error } = await supabase.from('ec_monitored_domains').upsert({
                   user_id: user.id,
                   domain: certResult.domain,
                   alert_threshold_days: 30,
                   scan_interval_hours: 24
                 }, { onConflict: 'user_id,domain' })
-                if (error) throw error
-                alert('✅ Added to Monitor! You will get alerts before expiry.')
+                if (error) { alert('Error: ' + error.message); return }
+                alert('✅ Added to Monitor! You will get alerts 30 days before expiry.')
                 window.open('/monitor', '_blank')
               } catch(e) {
-                window.open('/monitor', '_blank')
+                alert('Error: ' + e.message)
               }
             }}>📅 Add to Monitor</button>
             <button className="btn btn-secondary" onClick={resetAll}>🔄 Issue Another</button>
