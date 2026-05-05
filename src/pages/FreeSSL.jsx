@@ -84,9 +84,17 @@ export default function FreeSSL() {
   const [copied, setCopied] = useState('')
   const [polling, setPolling] = useState(false)
 
-  // Always start fresh - clear any stale state
+  // Always start completely fresh on page load
   useEffect(() => {
     localStorage.removeItem('ec_ssl_state')
+    localStorage.removeItem('ec_ssl_session')
+    // Force step 0 on every mount
+    setStep(0)
+    setDomain('')
+    setChallengeInfo(null)
+    setCertResult(null)
+    setError('')
+    setAgreed(false)
   }, [])
   const [dnsCheckResult, setDnsCheckResult] = useState(null)
   const [agreed, setAgreed] = useState(false)
