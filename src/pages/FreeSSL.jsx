@@ -336,24 +336,19 @@ export default function FreeSSL() {
             <button className="btn btn-primary" onClick={() => { downloadText(certResult.cert,`${certResult.domain}-cert.pem`); setTimeout(()=>downloadText(certResult.privateKey,`${certResult.domain}-key.pem`),300); setTimeout(()=>downloadText(certResult.fullchain,`${certResult.domain}-fullchain.pem`),600) }}>⬇ Download All Files</button>
             <button className="btn btn-secondary" onClick={() => window.open('/convert','_blank')}>🔄 Convert to PFX/JKS</button>
             <button className="btn btn-secondary" onClick={async () => {
-              const { data: { user } } = await supabase.auth.getUser()
-              if (!user) {
-                alert('Please log in first to use Monitor.')
-                window.open('/monitor', '_blank')
-                return
+              try {
+                const { data: { user } } = await supabase.auth.getUser()
+                if (!user) {
+                  window.location.href = '/monitor'
+                  return
+                }
+                const { error } = await supabase.from('ec_monitored_domains')
+                  .upsert({ user_id: user.id, domain: certResult.domain, alert_threshold_days: 30, scan_interval_hours: 24 }, { onConflict: 'user_id,domain' })
+                if (error) throw error
+                window.location.href = '/monitor'
+              } catch(e) {
+                window.location.href = '/monitor'
               }
-              const { error } = await supabase.from('ec_monitored_domains').insert({
-                user_id: user.id,
-                domain: certResult.domain,
-                alert_threshold_days: 30,
-                scan_interval_hours: 24
-              })
-              if (error && !error.message.includes('duplicate')) {
-                alert('Error adding to monitor: ' + error.message)
-                return
-              }
-              alert('✅ ' + certResult.domain + ' added to Monitor! You will get alerts 30 days before expiry.')
-              window.open('/monitor', '_blank')
             }}>📅 Add to Monitor</button>
             <button className="btn btn-secondary" onClick={resetAll}>🔄 Issue Another</button>
           </div>
