@@ -268,6 +268,14 @@ export default function FreeSSL() {
       )}
 
       {/* STEP 1 — Add DNS record */}
+      {step === 1 && !challengeInfo && (
+        <div className="card" style={{ textAlign: 'center', padding: '40px 24px' }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>Session expired</div>
+          <div style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 16 }}>Please start again to get a new DNS challenge value.</div>
+          <button className="btn btn-primary" onClick={() => { localStorage.removeItem('ec_ssl_state'); localStorage.removeItem('ec_ssl_session'); setStep(0); }}>← Start Over</button>
+        </div>
+      )}
       {step === 1 && challengeInfo && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
           <div className="card">
@@ -311,7 +319,7 @@ export default function FreeSSL() {
               <button className="btn btn-primary btn-lg" onClick={verifyDNS} disabled={loading}>
                 {loading ? <><span className="spinner"></span> Checking DNS...</> : '✅ Verify DNS & Continue →'}
               </button>
-              <button className="btn btn-secondary" onClick={() => setStep(0)}>← Back</button>
+              <button className="btn btn-secondary" onClick={() => { localStorage.removeItem('ec_ssl_state'); setStep(0); setChallengeInfo(null); }}>← Back</button>
             </div>
           </div>
 
@@ -368,7 +376,7 @@ export default function FreeSSL() {
             <button className="btn btn-primary btn-lg" onClick={finalizeCert} disabled={loading}>
               {loading ? <><span className="spinner"></span> Issuing...</> : '🔐 Issue My Certificate →'}
             </button>
-            <button className="btn btn-secondary" onClick={() => setStep(1)}>← Back</button>
+            <button className="btn btn-secondary" onClick={() => { localStorage.removeItem('ec_ssl_state'); setStep(0); setChallengeInfo(null); }}>← Start Over</button>
           </div>
         </div>
       )}
