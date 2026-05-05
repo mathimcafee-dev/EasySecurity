@@ -64,6 +64,11 @@ export default function FreeSSL() {
   const [polling, setPolling] = useState(false)
   const [dnsCheckResult, setDnsCheckResult] = useState(null)
   const [agreed, setAgreed] = useState(false)
+  const [dnsProvider, setDnsProvider] = useState('manual') // 'manual' | 'cloudflare' | 'godaddy'
+  const [providerKey, setProviderKey] = useState('')
+  const [providerSecret, setProviderSecret] = useState('')
+  const [providerStatus, setProviderStatus] = useState(null) // null | 'verifying' | 'verified' | 'error'
+  const [providerMsg, setProviderMsg] = useState('')
 
   // On mount: always wipe everything and start fresh
   useEffect(() => {
@@ -96,6 +101,24 @@ export default function FreeSSL() {
     return data
   }
 
+  const verifyProvider = async () => {
+    if (!domain.trim()) { setError('Enter a domain first'); return }
+    setProviderStatus('verifying'); setProviderMsg('')
+    try {
+      const res = await fetch('/api/dns-provider', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'verify', provider: dnsProvider, apiKey: providerKey, apiSecret: providerSecret, domain: domain.trim() })
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setProviderStatus('verified')
+      setProviderMsg(dnsProvider === 'cloudflare' ? `✅ Zone found: ${data.zoneName}` : `✅ Domain verified: ${data.domain}`)
+    } catch(e) {
+      setProviderStatus('error')
+      setProviderMsg('❌ ' + e.message)
+    }
+  }
+
   const startOrder = async () => {
     const d = domain.trim().replace(/^https?:\/\//, '').replace(/\/.*/, '')
     if (!d) { setError('Enter a domain name'); return }
@@ -105,6 +128,23 @@ export default function FreeSSL() {
     setLoading(false)
     if (data.error) { setError(data.error); return }
     setChallengeInfo(data)
+    // Auto-add DNS via provider if configured
+    if (dnsProvider !== 'manual' && providerKey) {
+      try {
+        const dnsRes = await fetch('/api/dns-provider', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'add_txt', provider: dnsProvider,
+            apiKey: providerKey, apiSecret: providerSecret,
+            domain: domain.trim(), txtValue: data.txtValue
+          })
+        })
+        const dnsData = await dnsRes.json()
+        if (dnsData.ok) {
+          setChallengeInfo({ ...data, autoAdded: true, autoProvider: dnsProvider })
+        }
+      } catch(e) { console.log('Auto DNS failed, manual needed:', e.message) }
+    }
     setStep(1)
   }
 
@@ -198,8 +238,58 @@ export default function FreeSSL() {
               <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} style={{ marginTop:2, width:'auto' }} />
               <span>I agree to the <a href="https://letsencrypt.org/documents/LE-SA-v1.3-September-21-2022.pdf" target="_blank" rel="noopener noreferrer" style={{ color:'var(--teal)' }}>Let's Encrypt Subscriber Agreement</a> and confirm I control this domain.</span>
             </label>
+            {/* DNS Provider Selection */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.6px' }}>DNS Verification Method</label>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                {[['manual','✋ Manual'],['cloudflare','🟠 Cloudflare'],['godaddy','🐐 GoDaddy']].map(([val, label]) => (
+                  <button key={val} className={`btn btn-sm ${dnsProvider===val?'btn-primary':'btn-secondary'}`}
+                    onClick={() => { setDnsProvider(val); setProviderStatus(null); setProviderMsg('') }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {dnsProvider !== 'manual' && (
+                <div style={{ background: 'var(--slate-9)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 12 }}>
+                  {dnsProvider === 'cloudflare' && (
+                    <div>
+                      <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 6 }}>
+                        Create an API Token at <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--teal)' }}>Cloudflare Dashboard</a> with <strong>Zone:DNS:Edit</strong> permission.
+                      </div>
+                      <input placeholder="Cloudflare API Token" value={providerKey}
+                        onChange={e => { setProviderKey(e.target.value); setProviderStatus(null) }}
+                        style={{ marginBottom: 8 }} type="password" />
+                    </div>
+                  )}
+                  {dnsProvider === 'godaddy' && (
+                    <div>
+                      <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 6 }}>
+                        Get API keys from <a href="https://developer.godaddy.com/keys" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--teal)' }}>GoDaddy Developer Portal</a>.
+                      </div>
+                      <input placeholder="GoDaddy API Key" value={providerKey}
+                        onChange={e => { setProviderKey(e.target.value); setProviderStatus(null) }}
+                        style={{ marginBottom: 8 }} />
+                      <input placeholder="GoDaddy API Secret" value={providerSecret}
+                        onChange={e => { setProviderSecret(e.target.value); setProviderStatus(null) }}
+                        style={{ marginBottom: 8 }} type="password" />
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <button className="btn btn-secondary btn-sm" onClick={verifyProvider} disabled={providerStatus==='verifying' || !providerKey}>
+                      {providerStatus==='verifying' ? <><span className="spinner"></span> Verifying...</> : '🔍 Test Connection'}
+                    </button>
+                    {providerMsg && <span style={{ fontSize: 12, color: providerStatus==='verified' ? 'var(--green)' : 'var(--red)' }}>{providerMsg}</span>}
+                  </div>
+                  {providerStatus === 'verified' && (
+                    <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6 }}>
+                      🚀 DNS record will be added automatically — no manual steps needed!
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
             {error && <div className="alert alert-error" style={{ marginBottom:12 }}>{error}</div>}
-            <button className="btn btn-primary btn-lg" onClick={startOrder} disabled={loading || !domain.trim()}>
+            <button className="btn btn-primary btn-lg" onClick={startOrder} disabled={loading || !domain.trim() || (dnsProvider !== 'manual' && providerStatus !== 'verified')}>
               {loading ? <><span className="spinner"></span> Preparing...</> : '🔒 Generate Free SSL →'}
             </button>
           </div>
@@ -224,8 +314,13 @@ export default function FreeSSL() {
       {step === 1 && challengeInfo && (
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20 }}>
           <div className="card">
-            <div className="card-title">📋 Add This DNS TXT Record</div>
-            <div style={{ background:'var(--teal-light)', border:'1px solid var(--teal-border)', borderRadius:'var(--radius-sm)', padding:14, marginBottom:16 }}>
+            <div className="card-title">📋 {challengeInfo?.autoAdded ? `✅ DNS Auto-Added via ${challengeInfo.autoProvider === 'cloudflare' ? 'Cloudflare' : 'GoDaddy'}` : 'Add This DNS TXT Record'}</div>
+            {challengeInfo?.autoAdded && (
+              <div className="alert alert-success" style={{ marginBottom: 16 }}>
+                🚀 DNS TXT record was automatically added to your {challengeInfo.autoProvider === 'cloudflare' ? 'Cloudflare' : 'GoDaddy'} account. Click <strong>Verify DNS & Continue</strong> — no manual steps needed!
+              </div>
+            )}
+            <div style={{ background:'var(--teal-light)', border:'1px solid var(--teal-border)', borderRadius:'var(--radius-sm)', padding:14, marginBottom:16, display: challengeInfo?.autoAdded ? 'none' : 'block' }}>
               <div style={{ fontSize:11, fontWeight:700, color:'var(--teal-dark)', textTransform:'uppercase', letterSpacing:'.8px', marginBottom:10 }}>Add this TXT record to your DNS:</div>
               <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                 {[['Type','TXT'],['Name / Host','_acme-challenge'],['Value',challengeInfo.txtValue],['TTL','300']].map(([label, value]) => (
