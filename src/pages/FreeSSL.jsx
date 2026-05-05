@@ -11,6 +11,17 @@ function genSessionId() {
 const STEPS = ['Enter Domain', 'Add DNS Record', 'Verify & Issue', 'Download']
 
 const DNS_GUIDES = {
+  vercel: {
+    label: 'Vercel DNS',
+    icon: '▲',
+    steps: [
+      'Go to vercel.com/mathivspartan/domains/easysecurity.in',
+      'Click Add Record',
+      'Type: TXT, Name: _acme-challenge, Value: (paste TXT value), TTL: 60',
+      'Click Save — changes are instant, no wait needed',
+      'Come back and click Verify DNS',
+    ]
+  },
   godaddy: {
     label: 'GoDaddy',
     icon: '🐐',
@@ -63,7 +74,7 @@ export default function FreeSSL() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [challengeInfo, setChallengeInfo] = useState(null)
-  const [dnsGuide, setDnsGuide] = useState('godaddy')
+  const [dnsGuide, setDnsGuide] = useState('vercel')
   const [verifyStatus, setVerifyStatus] = useState(null)
   const [certResult, setCertResult] = useState(null)
   const [copied, setCopied] = useState('')
