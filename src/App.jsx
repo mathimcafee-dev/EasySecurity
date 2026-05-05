@@ -13,6 +13,7 @@ import Monitor from './pages/Monitor'
 import { APIKeys, Docs } from './pages/APIAndDocs'
 import Notifications from './pages/Notifications'
 import JKSInspector from './pages/JKSInspector'
+import Converter from './pages/Converter'
 import About from './pages/About'
 
 function NotFound() {
@@ -36,7 +37,7 @@ export default function App() {
             <Route path="/" element={<Home setScanContext={setScanContext} />} />
             <Route path="/decode" element={<DecodeCSR />} />
             <Route path="/match" element={<CertMatcher />} />
-            <Route path="/convert" element={<CertConversion />} />
+            
             <Route path="/dns" element={<DNSChecker />} />
             <Route path="/compare" element={<Compare />} />
             <Route path="/renew" element={<RenewWizard />} />
@@ -46,6 +47,7 @@ export default function App() {
             <Route path="/about" element={<About />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/jks" element={<JKSInspector />} />
+            <Route path="/convert" element={<Converter />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
