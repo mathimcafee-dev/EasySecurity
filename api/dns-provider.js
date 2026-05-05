@@ -1,39 +1,56 @@
-// Auto-DNS API — adds/removes TXT records via Cloudflare or GoDaddy API
 import { createClient } from '@supabase/supabase-js'
+import crypto from 'crypto'
 
 const SUPABASE_URL = 'https://zwgdpsuvduexcdzcwjau.supabase.co'
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || ''
+const ENC_KEY = process.env.DNS_CRED_ENC_KEY || 'easysecurity-dns-key-32byteslong!!'
+
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'content-type, authorization',
   'Access-Control-Allow-Methods': 'POST, OPTIONS'
 }
 
-// ── Cloudflare ────────────────────────────────────────────────────────────────
+// AES-256-GCM encryption
+function encrypt(text) {
+  const key = crypto.scryptSync(ENC_KEY, 'easysec-salt', 32)
+  const iv = crypto.randomBytes(16)
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv)
+  const enc = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()])
+  const tag = cipher.getAuthTag()
+  return iv.toString('hex') + ':' + tag.toString('hex') + ':' + enc.toString('hex')
+}
+
+function decrypt(data) {
+  const [ivHex, tagHex, encHex] = data.split(':')
+  const key = crypto.scryptSync(ENC_KEY, 'easysec-salt', 32)
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivHex, 'hex'))
+  decipher.setAuthTag(Buffer.from(tagHex, 'hex'))
+  return decipher.update(Buffer.from(encHex, 'hex')) + decipher.final('utf8')
+}
+
+// Cloudflare
 async function cfGetZoneId(apiKey, domain) {
-  // Try stored zone_id first, else look up by domain
-  const rootDomain = domain.split('.').slice(-2).join('.')
-  const res = await fetch(`https://api.cloudflare.com/client/v4/zones?name=${rootDomain}`, {
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }
+  const root = domain.split('.').slice(-2).join('.')
+  const res = await fetch(`https://api.cloudflare.com/client/v4/zones?name=${root}`, {
+    headers: { Authorization: `Bearer ${apiKey}` }
   })
   const data = await res.json()
-  if (!data.success || !data.result?.length) throw new Error(`Cloudflare zone not found for ${rootDomain}. Check your API key has Zone:DNS:Edit permission.`)
-  return data.result[0].id
+  if (!data.success || !data.result?.length) throw new Error(`Cloudflare zone not found for ${root}. Ensure API token has Zone:DNS:Edit permission.`)
+  return { zoneId: data.result[0].id, zoneName: data.result[0].name }
 }
 
 async function cfAddTXT(apiKey, domain, name, value) {
-  const zoneId = await cfGetZoneId(apiKey, domain)
-  // Delete existing _acme-challenge records first
+  const { zoneId } = await cfGetZoneId(apiKey, domain)
   const listRes = await fetch(`https://api.cloudflare.com/client/v4/zones/${zoneId}/dns_records?type=TXT&name=${name}.${domain}`, {
     headers: { Authorization: `Bearer ${apiKey}` }
   })
-  const listData = await listRes.json()
-  for (const r of (listData.result || [])) {
+  const list = await listRes.json()
+  for (const r of (list.result || [])) {
     await fetch(`https://api.cloudflare.com/client/v4/zones/${zoneId}/dns_records/${r.id}`, {
       method: 'DELETE', headers: { Authorization: `Bearer ${apiKey}` }
     })
   }
-  // Add new record
   const addRes = await fetch(`https://api.cloudflare.com/client/v4/zones/${zoneId}/dns_records`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -41,31 +58,17 @@ async function cfAddTXT(apiKey, domain, name, value) {
   })
   const addData = await addRes.json()
   if (!addData.success) throw new Error('Cloudflare error: ' + JSON.stringify(addData.errors))
-  return { ok: true, provider: 'cloudflare', recordId: addData.result?.id }
+  return { ok: true, provider: 'cloudflare' }
 }
 
-async function cfVerify(apiKey, domain) {
-  // Just test if we can list zones — validates the key
-  const rootDomain = domain.split('.').slice(-2).join('.')
-  const res = await fetch(`https://api.cloudflare.com/client/v4/zones?name=${rootDomain}`, {
-    headers: { Authorization: `Bearer ${apiKey}` }
-  })
-  const data = await res.json()
-  if (!data.success) throw new Error('Invalid Cloudflare API token: ' + JSON.stringify(data.errors))
-  if (!data.result?.length) throw new Error(`No Cloudflare zone found for ${rootDomain}`)
-  return { ok: true, zoneId: data.result[0].id, zoneName: data.result[0].name }
-}
-
-// ── GoDaddy ───────────────────────────────────────────────────────────────────
+// GoDaddy
 async function gdAddTXT(apiKey, apiSecret, domain, name, value) {
-  const rootDomain = domain.split('.').slice(-2).join('.')
+  const root = domain.split('.').slice(-2).join('.')
   const auth = `sso-key ${apiKey}:${apiSecret}`
-  // Delete old record
-  await fetch(`https://api.godaddy.com/v1/domains/${rootDomain}/records/TXT/${name}`, {
+  await fetch(`https://api.godaddy.com/v1/domains/${root}/records/TXT/${name}`, {
     method: 'DELETE', headers: { Authorization: auth }
   })
-  // Add new
-  const res = await fetch(`https://api.godaddy.com/v1/domains/${rootDomain}/records/TXT/${name}`, {
+  const res = await fetch(`https://api.godaddy.com/v1/domains/${root}/records/TXT/${name}`, {
     method: 'PUT',
     headers: { Authorization: auth, 'Content-Type': 'application/json' },
     body: JSON.stringify([{ data: value, ttl: 600 }])
@@ -77,19 +80,6 @@ async function gdAddTXT(apiKey, apiSecret, domain, name, value) {
   return { ok: true, provider: 'godaddy' }
 }
 
-async function gdVerify(apiKey, apiSecret, domain) {
-  const rootDomain = domain.split('.').slice(-2).join('.')
-  const res = await fetch(`https://api.godaddy.com/v1/domains/${rootDomain}`, {
-    headers: { Authorization: `sso-key ${apiKey}:${apiSecret}` }
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error('GoDaddy error: ' + (err.message || 'Invalid API key'))
-  }
-  const data = await res.json()
-  return { ok: true, domain: data.domain, status: data.status }
-}
-
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') { Object.entries(cors).forEach(([k,v])=>res.setHeader(k,v)); return res.status(200).end() }
   Object.entries(cors).forEach(([k,v]) => res.setHeader(k, v))
@@ -99,52 +89,70 @@ export default async function handler(req, res) {
   try {
     const { action, provider, apiKey, apiSecret, domain, txtName, txtValue, userId } = req.body
 
-    // VERIFY — test credentials without saving
+    // Must have userId for all actions involving stored creds
+    if (!userId && ['save','add_txt','load','delete'].includes(action)) {
+      return res.status(401).json({ error: 'Authentication required. Please sign in.' })
+    }
+
+    // VERIFY — test credentials
     if (action === 'verify') {
+      if (!apiKey) return res.status(400).json({ error: 'API key required' })
       if (provider === 'cloudflare') {
-        const result = await cfVerify(apiKey, domain)
-        return res.json(result)
+        const { zoneId, zoneName } = await cfGetZoneId(apiKey, domain)
+        return res.json({ ok: true, zoneId, zoneName })
       }
       if (provider === 'godaddy') {
-        const result = await gdVerify(apiKey, apiSecret, domain)
-        return res.json(result)
+        const root = domain.split('.').slice(-2).join('.')
+        const r = await fetch(`https://api.godaddy.com/v1/domains/${root}`, {
+          headers: { Authorization: `sso-key ${apiKey}:${apiSecret}` }
+        })
+        if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.message || 'Invalid credentials') }
+        const d = await r.json()
+        return res.json({ ok: true, domain: d.domain, status: d.status })
       }
       return res.status(400).json({ error: 'Unknown provider' })
     }
 
-    // SAVE — store credentials for a user
+    // SAVE — encrypt and store credentials
     if (action === 'save') {
-      if (!userId) return res.status(400).json({ error: 'userId required' })
+      const encKey = encrypt(apiKey)
+      const encSecret = apiSecret ? encrypt(apiSecret) : null
       const { error } = await sb.from('ec_dns_credentials').upsert({
-        user_id: userId,
-        provider,
-        api_key: apiKey,
-        api_secret: apiSecret || null,
+        user_id: userId, provider,
+        api_key_enc: encKey,
+        api_secret_enc: encSecret,
         label: provider === 'cloudflare' ? 'Cloudflare' : 'GoDaddy',
         updated_at: new Date().toISOString()
       }, { onConflict: 'user_id,provider' })
       if (error) return res.status(500).json({ error: error.message })
+      return res.json({ ok: true, message: 'Credentials saved securely' })
+    }
+
+    // LOAD — return masked credentials info (not the actual keys)
+    if (action === 'load') {
+      const { data } = await sb.from('ec_dns_credentials')
+        .select('provider, label, updated_at').eq('user_id', userId)
+      return res.json({ ok: true, providers: data || [] })
+    }
+
+    // DELETE — remove stored credentials
+    if (action === 'delete') {
+      await sb.from('ec_dns_credentials').delete().eq('user_id', userId).eq('provider', provider)
       return res.json({ ok: true })
     }
 
-    // ADD_TXT — add DNS record using stored or provided credentials
+    // ADD_TXT — use provided or stored encrypted credentials
     if (action === 'add_txt') {
       let key = apiKey, secret = apiSecret
-      // If no key provided, load from DB
-      if (!key && userId) {
+      if (!key) {
         const { data: creds } = await sb.from('ec_dns_credentials')
-          .select('api_key, api_secret').eq('user_id', userId).eq('provider', provider).single()
-        if (creds) { key = creds.api_key; secret = creds.api_secret }
+          .select('api_key_enc, api_secret_enc').eq('user_id', userId).eq('provider', provider).single()
+        if (!creds) return res.status(404).json({ error: 'No saved credentials found for ' + provider })
+        key = decrypt(creds.api_key_enc)
+        secret = creds.api_secret_enc ? decrypt(creds.api_secret_enc) : null
       }
-      if (!key) return res.status(400).json({ error: 'No API credentials found' })
-      if (provider === 'cloudflare') {
-        const result = await cfAddTXT(key, domain, txtName || '_acme-challenge', txtValue)
-        return res.json(result)
-      }
-      if (provider === 'godaddy') {
-        const result = await gdAddTXT(key, secret, domain, txtName || '_acme-challenge', txtValue)
-        return res.json(result)
-      }
+      if (provider === 'cloudflare') return res.json(await cfAddTXT(key, domain, txtName || '_acme-challenge', txtValue))
+      if (provider === 'godaddy') return res.json(await gdAddTXT(key, secret, domain, txtName || '_acme-challenge', txtValue))
       return res.status(400).json({ error: 'Unknown provider' })
     }
 

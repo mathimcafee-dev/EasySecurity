@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../hooks/useAuth'
-import { supabase, signInWithGoogle } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
+import { useNavigate } from 'react-router-dom'
 import { dnsLookup } from '../lib/pki'
 
 function RiskBadge({ risk }) {
@@ -38,6 +39,9 @@ export default function Monitor() {
   const [certRequest, setCertRequest] = useState({})
   const [selectedDomain, setSelectedDomain] = useState(null)
   const [dnsProvider, setDnsProvider] = useState('manual')
+  const [showBulkImport, setShowBulkImport] = useState(false)
+  const [bulkText, setBulkText] = useState('')
+  const [bulkImporting, setBulkImporting] = useState(false)
   const [providerKey, setProviderKey] = useState('')
   const [providerSecret, setProviderSecret] = useState('')
   const [providerStatus, setProviderStatus] = useState(null)
@@ -110,6 +114,51 @@ export default function Monitor() {
       if (daysLeft >= 0 && daysLeft < 30) setAlerts(a => [...a, { id: Date.now(), msg: `${d} expires in ${daysLeft} days`, risk: daysLeft < 7 ? 'CRITICAL' : 'HIGH' }])
     } catch(e) { console.error('Scan error:', e) }
     setScanning(s => { const n = { ...s }; delete n[domain]; return n })
+  }
+
+  const handleBulkImport = async (text) => {
+    // Parse domains from text — support comma, newline, semicolon, space separated
+    const raw = text.replace(/[,;\n\r\t]+/g, ' ').split(' ')
+    const domains = [...new Set(
+      raw.map(d => d.trim().toLowerCase()
+        .replace(/^https?:\/\//, '').replace(/\/.*/, '').replace(/^\*\./, ''))
+      .filter(d => d && d.includes('.') && d.length > 3 && !d.startsWith('.'))
+    )]
+    if (!domains.length) { alert('No valid domains found'); return }
+    setBulkImporting(true)
+    let added = 0, skipped = 0
+    for (const domain of domains) {
+      const { error } = await supabase.from('ec_monitored_domains').upsert({
+        user_id: user.id, domain, alert_threshold_days: 30, scan_interval_hours: 24
+      }, { onConflict: 'user_id,domain' })
+      if (!error) added++; else skipped++
+    }
+    setBulkImporting(false)
+    setShowBulkImport(false)
+    setBulkText('')
+    await load()
+    alert(`✅ Imported ${added} domain${added !== 1 ? 's' : ''}${skipped > 0 ? ` (${skipped} skipped)` : ''}`)
+  }
+
+  const handleFileImport = (file) => {
+    const ext = file.name.split('.').pop().toLowerCase()
+    if (ext === 'xlsx' || ext === 'xls') {
+      const reader = new FileReader()
+      reader.onload = async (e) => {
+        try {
+          const { read, utils } = await import('xlsx')
+          const wb = read(e.target.result, { type: 'array' })
+          const ws = wb.Sheets[wb.SheetNames[0]]
+          const data = utils.sheet_to_csv(ws)
+          handleBulkImport(data)
+        } catch(err) { alert('Error reading Excel file: ' + err.message) }
+      }
+      reader.readAsArrayBuffer(file)
+    } else {
+      const reader = new FileReader()
+      reader.onload = (e) => handleBulkImport(e.target.result)
+      reader.readAsText(file)
+    }
   }
 
   const verifyProvider = async (domain) => {
@@ -209,6 +258,17 @@ export default function Monitor() {
   if (loading) return <div className="content-wrap" style={{ textAlign: 'center', padding: 60 }}><span className="spinner" style={{ width: 32, height: 32 }}></span></div>
 
   if (!user) return (
+    <div className="content-wrap" style={{ textAlign: 'center', padding: 60 }}>
+      <div style={{ fontSize: 48, marginBottom: 16 }}>🔐</div>
+      <div style={{ fontWeight: 700, fontSize: 20, marginBottom: 8 }}>Sign in to access Monitor</div>
+      <div style={{ color: 'var(--text-3)', marginBottom: 24 }}>Track certificate expiry and get alerts for all your domains.</div>
+      <button className="btn btn-primary btn-lg" onClick={() => navigate('/auth', { state: { from: '/monitor' } })}>
+        Sign In / Create Account
+      </button>
+    </div>
+  )
+
+  if (false) return (
     <div className="content-wrap">
       <div style={{ textAlign: 'center', maxWidth: 440, margin: '60px auto' }}>
         <div style={{ fontSize: 48, marginBottom: 16 }}>📅</div>
@@ -227,7 +287,10 @@ export default function Monitor() {
             <div className="page-title">📅 Expiry Monitor</div>
             <div className="page-sub">Track {domains.length} domain{domains.length !== 1 ? 's' : ''} — signed in as {user.email}</div>
           </div>
-          <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ Add Domain</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-secondary" onClick={() => setShowBulkImport(true)}>📥 Bulk Import</button>
+            <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ Add Domain</button>
+          </div>
         </div>
       </div>
 
@@ -448,6 +511,40 @@ export default function Monitor() {
           </div>
         )
       })()}
+      {/* Bulk Import Modal */}
+      {showBulkImport && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+          onClick={() => setShowBulkImport(false)}>
+          <div className="card" style={{ width:520, boxShadow:'0 20px 60px rgba(0,0,0,.2)' }} onClick={e => e.stopPropagation()}>
+            <div className="card-title">📥 Bulk Import Domains</div>
+            <div style={{ fontSize:13, color:'var(--text-3)', marginBottom:12 }}>
+              Paste domains or upload a .txt, .csv, or .xlsx file. Supports comma, newline, or semicolon separated.
+            </div>
+            {/* File upload */}
+            <div style={{ border:'2px dashed var(--border)', borderRadius:8, padding:'16px', textAlign:'center', marginBottom:14, cursor:'pointer', background:'var(--slate-9)' }}
+              onClick={() => document.getElementById('bulk-file-input').click()}
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => { e.preventDefault(); handleFileImport(e.dataTransfer.files[0]) }}>
+              <input id="bulk-file-input" type="file" accept=".txt,.csv,.xlsx,.xls" style={{ display:'none' }}
+                onChange={e => e.target.files[0] && handleFileImport(e.target.files[0])} />
+              <div style={{ fontSize:24, marginBottom:6 }}>📂</div>
+              <div style={{ fontSize:13, fontWeight:600 }}>Drop file here or click to upload</div>
+              <div style={{ fontSize:11, color:'var(--text-4)', marginTop:4 }}>.txt, .csv, .xlsx supported</div>
+            </div>
+            <div style={{ fontSize:12, fontWeight:600, marginBottom:6, color:'var(--text-3)' }}>OR PASTE DOMAINS</div>
+            <textarea
+              placeholder="example.com, api.mysite.com, shop.store.com" 
+              value={bulkText} onChange={e => setBulkText(e.target.value)}
+              style={{ width:'100%', height:120, fontFamily:'var(--mono)', fontSize:12, padding:10, borderRadius:6, border:'1px solid var(--border)', resize:'vertical', marginBottom:14 }} />
+            <div style={{ display:'flex', gap:8 }}>
+              <button className="btn btn-primary" onClick={() => handleBulkImport(bulkText)} disabled={bulkImporting || !bulkText.trim()}>
+                {bulkImporting ? <><span className="spinner"></span> Importing...</> : '📥 Import Domains'}
+              </button>
+              <button className="btn btn-secondary" onClick={() => { setShowBulkImport(false); setBulkText('') }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
       {showAdd && <AddDomainModal onAdd={addDomain} onClose={() => setShowAdd(false)} />}
     </div>
   )

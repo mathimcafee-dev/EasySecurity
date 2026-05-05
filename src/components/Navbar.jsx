@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { signInWithGoogle, signOut } from '../lib/supabase'
+import { signOut } from '../lib/supabase'
 
 export default function Navbar() {
   const nav = useNavigate()
@@ -39,7 +39,7 @@ export default function Navbar() {
             <button className="btn btn-secondary btn-sm" onClick={() => signOut()}>Sign out</button>
           </>
         ) : (
-          <button className="btn btn-secondary btn-sm" onClick={() => signInWithGoogle()}>Sign in →</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => () => window.location.href = "/auth"()}>Sign in →</button>
         )}
       </div>
     </nav>
