@@ -52,6 +52,9 @@ export default function App() {
             <Route path="/jks" element={<JKSInspector />} />
             <Route path="/convert" element={<Converter />} />
             <Route path="/free-ssl" element={<FreeSSL />} />
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/login" element={<Navigate to="/auth" replace />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
