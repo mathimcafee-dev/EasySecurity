@@ -35,6 +35,7 @@ export default function Monitor() {
   const [domains, setDomains] = useState([])
   const [fetching, setFetching] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
+  const [certRequest, setCertRequest] = useState({}) // { domain: { step, txtValue, challengeDomain, sessionId, loading, error } }
   const [scanning, setScanning] = useState({})
   const [alerts, setAlerts] = useState([])
 
@@ -103,6 +104,57 @@ export default function Monitor() {
       if (daysLeft >= 0 && daysLeft < 30) setAlerts(a => [...a, { id: Date.now(), msg: `${d} expires in ${daysLeft} days`, risk: daysLeft < 7 ? 'CRITICAL' : 'HIGH' }])
     } catch(e) { console.error('Scan error:', e) }
     setScanning(s => { const n = { ...s }; delete n[domain]; return n })
+  }
+
+  const requestCert = async (domain) => {
+    const sessionId = crypto.randomUUID().replace(/-/g,'')
+    setCertRequest(r => ({ ...r, [domain]: { step: 'loading', loading: true, error: null } }))
+    try {
+      const res = await fetch('/api/acme', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'start', sessionId, domain, staging: false })
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setCertRequest(r => ({ ...r, [domain]: { step: 'dns', loading: false, txtValue: data.txtValue, challengeDomain: data.challengeDomain, sessionId, autoAdded: data.autoAdded } }))
+    } catch(e) {
+      setCertRequest(r => ({ ...r, [domain]: { step: 'error', loading: false, error: e.message } }))
+    }
+  }
+
+  const verifyCert = async (domain) => {
+    const req = certRequest[domain]
+    if (!req) return
+    setCertRequest(r => ({ ...r, [domain]: { ...r[domain], loading: true, error: null } }))
+    try {
+      const res = await fetch('/api/acme', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'verify', sessionId: req.sessionId, domain })
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      if (!data.verified) throw new Error(data.message || 'TXT not found yet')
+      setCertRequest(r => ({ ...r, [domain]: { ...r[domain], step: 'issuing', loading: true } }))
+      // Finalize
+      let result = null
+      for (let i = 0; i < 5; i++) {
+        const fRes = await fetch('/api/acme', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'finalize', sessionId: req.sessionId, domain })
+        })
+        const fData = await fRes.json()
+        if (fData.status === 'issued') { result = fData; break }
+        if (fData.error) throw new Error(fData.error)
+        await new Promise(r => setTimeout(r, 3000))
+      }
+      if (!result) throw new Error('Certificate not ready. Try again.')
+      setCertRequest(r => ({ ...r, [domain]: { ...r[domain], step: 'done', loading: false, cert: result } }))
+    } catch(e) {
+      setCertRequest(r => ({ ...r, [domain]: { ...r[domain], loading: false, error: e.message } }))
+    }
   }
 
   if (loading) return <div className="content-wrap" style={{ textAlign: 'center', padding: 60 }}><span className="spinner" style={{ width: 32, height: 32 }}></span></div>
@@ -180,7 +232,7 @@ export default function Monitor() {
                     <div style={{ display: 'flex', gap: 4 }}>
                       <button className="btn btn-ghost btn-sm" title="Scan now" onClick={() => triggerScan(d.domain)} disabled={scanning[d.domain]}>{scanning[d.domain] ? <span className="spinner"></span> : '🔄'}</button>
                       <button className="btn btn-ghost btn-sm" title="View in scanner" onClick={() => window.open(`/?domain=${d.domain}`)}>🔍</button>
-                      <button className="btn btn-ghost btn-sm" title="Renew" onClick={() => window.open(`/renew?cn=${d.domain}`)}>🔄</button>
+                      <button className="btn btn-primary btn-sm" title="Request free SSL certificate" onClick={() => requestCert(d.domain)} disabled={certRequest[d.domain]?.loading}>🔒 Request Cert</button>
                       <button className="btn btn-danger btn-sm" onClick={() => removeDomain(d.id)}>✕</button>
                     </div>
                   </td>
@@ -188,6 +240,57 @@ export default function Monitor() {
               ))}
             </tbody>
           </table>
+          {/* Inline cert request panels */}
+          {domains.map(d => {
+            const req = certRequest[d.domain]
+            if (!req) return null
+            return (
+              <div key={d.domain} style={{ borderTop: '1px solid var(--border)', padding: '16px 20px', background: 'var(--slate-9)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13 }}>🔒 Free SSL — {d.domain}</div>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setCertRequest(r => { const n={...r}; delete n[d.domain]; return n })}>✕ Close</button>
+                </div>
+                {req.step === 'loading' && <div style={{ color: 'var(--text-3)', fontSize: 13 }}><span className="spinner" style={{ marginRight: 8 }}></span>Creating ACME order...</div>}
+                {req.step === 'error' && <div className="alert alert-error">{req.error}</div>}
+                {req.step === 'dns' && (
+                  <div>
+                    {req.autoAdded
+                      ? <div className="alert alert-success" style={{ marginBottom: 12 }}>✅ DNS record auto-added via Vercel! Click Verify below.</div>
+                      : <div style={{ marginBottom: 12 }}>
+                          <div className="alert alert-teal" style={{ marginBottom: 8 }}>Add this TXT record to your DNS then click Verify:</div>
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: 'var(--slate-10)', borderRadius: 6, padding: '10px 12px', border: '1px solid var(--border)', marginBottom: 8 }}>
+                            <div style={{ fontSize: 11, color: 'var(--text-3)', minWidth: 60 }}>Name</div>
+                            <div style={{ fontFamily: 'var(--mono)', fontSize: 12, flex: 1 }}>_acme-challenge</div>
+                            <button className="btn btn-ghost btn-sm" onClick={() => navigator.clipboard.writeText('_acme-challenge')}>📋</button>
+                          </div>
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: 'var(--slate-10)', borderRadius: 6, padding: '10px 12px', border: '1px solid var(--border)' }}>
+                            <div style={{ fontSize: 11, color: 'var(--text-3)', minWidth: 60 }}>Value</div>
+                            <div style={{ fontFamily: 'var(--mono)', fontSize: 11, flex: 1, wordBreak: 'break-all' }}>{req.txtValue}</div>
+                            <button className="btn btn-ghost btn-sm" onClick={() => navigator.clipboard.writeText(req.txtValue)}>📋</button>
+                          </div>
+                        </div>
+                    }
+                    {req.error && <div className="alert alert-error" style={{ marginBottom: 8 }}>{req.error}</div>}
+                    <button className="btn btn-primary" onClick={() => verifyCert(d.domain)} disabled={req.loading}>
+                      {req.loading ? <><span className="spinner"></span> Verifying...</> : '✅ Verify DNS & Issue Certificate'}
+                    </button>
+                  </div>
+                )}
+                {req.step === 'issuing' && <div style={{ color: 'var(--text-3)', fontSize: 13 }}><span className="spinner" style={{ marginRight: 8 }}></span>Issuing certificate from Let's Encrypt...</div>}
+                {req.step === 'done' && req.cert && (
+                  <div>
+                    <div className="alert alert-success" style={{ marginBottom: 12 }}>🎉 Certificate issued successfully!</div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button className="btn btn-primary btn-sm" onClick={() => { const a=document.createElement('a'); a.href='data:text/plain,'+encodeURIComponent(req.cert.cert); a.download=d.domain+'-cert.pem'; a.click() }}>⬇ cert.pem</button>
+                      <button className="btn btn-primary btn-sm" onClick={() => { const a=document.createElement('a'); a.href='data:text/plain,'+encodeURIComponent(req.cert.privateKey); a.download=d.domain+'-key.pem'; a.click() }}>⬇ key.pem</button>
+                      <button className="btn btn-secondary btn-sm" onClick={() => { const a=document.createElement('a'); a.href='data:text/plain,'+encodeURIComponent(req.cert.fullchain); a.download=d.domain+'-fullchain.pem'; a.click() }}>⬇ fullchain.pem</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setCertRequest(r => { const n={...r}; delete n[d.domain]; return n })}>Close</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
 
