@@ -171,7 +171,12 @@ export function certModulus(pem, type = 'cert') {
 }
 
 export async function generateCSR({ cn, o, ou, l, st, c, email, san, keySize, hash }) {
-  const keys = forge.pki.rsa.generateKeyPair({ bits: parseInt(keySize || 2048), e: 0x10001, workers: -1 })
+  const keys = await new Promise((resolve, reject) => {
+    forge.pki.rsa.generateKeyPair({ bits: parseInt(keySize || 2048), e: 0x10001, workers: 2 }, (err, keypair) => {
+      if (err) reject(err)
+      else resolve(keypair)
+    })
+  })
   const csr = forge.pki.createCertificationRequest()
   csr.publicKey = keys.publicKey
   const attrs = [{ name: 'commonName', value: cn }]
