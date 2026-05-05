@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { downloadText } from '../lib/pki'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../hooks/useAuth'
 
 const ACME_FN = '/api/acme'
 const VERSION = 'v9'
@@ -51,6 +52,7 @@ const DNS_GUIDES = {
 }
 
 export default function FreeSSL() {
+  const { user } = useAuth()
   const [step, setStep] = useState(0)
   const [domain, setDomain] = useState('')
   const [sessionId, setSessionId] = useState('')
@@ -242,12 +244,24 @@ export default function FreeSSL() {
             <div style={{ marginBottom: 16 }}>
               <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.6px' }}>DNS Verification Method</label>
               <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                {[['manual','✋ Manual'],['cloudflare','🟠 Cloudflare'],['godaddy','🐐 GoDaddy']].map(([val, label]) => (
-                  <button key={val} className={`btn btn-sm ${dnsProvider===val?'btn-primary':'btn-secondary'}`}
-                    onClick={() => { setDnsProvider(val); setProviderStatus(null); setProviderMsg('') }}>
-                    {label}
-                  </button>
-                ))}
+                <button className={`btn btn-sm ${dnsProvider==='manual'?'btn-primary':'btn-secondary'}`}
+                  onClick={() => { setDnsProvider('manual'); setProviderStatus(null); setProviderMsg('') }}>
+                  ✋ Manual
+                </button>
+                {user ? (
+                  <>
+                    {[['cloudflare','🟠 Cloudflare'],['godaddy','🐐 GoDaddy']].map(([val, label]) => (
+                      <button key={val} className={`btn btn-sm ${dnsProvider===val?'btn-primary':'btn-secondary'}`}
+                        onClick={() => { setDnsProvider(val); setProviderStatus(null); setProviderMsg('') }}>
+                        {label}
+                      </button>
+                    ))}
+                  </>
+                ) : (
+                  <span style={{ fontSize: 12, color: 'var(--text-3)', alignSelf: 'center', marginLeft: 4 }}>
+                    🔒 <a href="/auth" style={{ color: 'var(--teal)' }}>Sign in</a> to unlock auto-DNS (Cloudflare / GoDaddy)
+                  </span>
+                )}
               </div>
               {dnsProvider !== 'manual' && (
                 <div style={{ background: 'var(--slate-9)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 12 }}>
