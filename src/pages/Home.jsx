@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { parsePemBundle, scoreAndRisk } from '../lib/pki'
 import ScanResult from '../components/ScanResult'
