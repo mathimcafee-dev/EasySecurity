@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { downloadText } from '../lib/pki'
 
-const ACME_FN = 'https://zwgdpsuvduexcdzcwjau.supabase.co/functions/v1/acme-ssl'
+const ACME_FN = '/api/acme'
 const VERSION = 'v9'
 
 function genSessionId() {
