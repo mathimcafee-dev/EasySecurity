@@ -12,6 +12,7 @@ import RenewWizard from './pages/Renew'
 import Monitor from './pages/Monitor'
 import { APIKeys, Docs } from './pages/APIAndDocs'
 import Notifications from './pages/Notifications'
+import JKSInspector from './pages/JKSInspector'
 import About from './pages/About'
 
 function NotFound() {
@@ -44,6 +45,7 @@ export default function App() {
             <Route path="/docs" element={<Docs />} />
             <Route path="/about" element={<About />} />
             <Route path="/notifications" element={<Notifications />} />
+            <Route path="/jks" element={<JKSInspector />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>

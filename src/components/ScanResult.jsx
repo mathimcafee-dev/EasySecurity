@@ -1,5 +1,118 @@
 import { useState } from 'react'
 import { downloadText } from '../lib/pki'
+import { jsPDF } from 'jspdf'
+
+function generatePDF(result) {
+  const { certs = [], risk, score, findings = [] } = result
+  const leaf = certs[0]
+  const doc = new jsPDF()
+  const teal = [13, 148, 136]
+  const dark = [15, 23, 42]
+  const gray = [100, 116, 139]
+
+  // Header bar
+  doc.setFillColor(...dark)
+  doc.rect(0, 0, 210, 28, 'F')
+  doc.setTextColor(255, 255, 255)
+  doc.setFontSize(16)
+  doc.setFont('helvetica', 'bold')
+  doc.text('EasySecurity.in', 14, 12)
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...[148, 163, 184])
+  doc.text('Certificate Scan Report', 14, 20)
+  doc.text('Generated: ' + new Date().toLocaleString(), 130, 20)
+
+  // Risk banner
+  const riskColors = { SECURE: [22,163,74], LOW: [37,99,235], MEDIUM: [217,119,6], HIGH: [234,88,12], CRITICAL: [220,38,38] }
+  const rc = riskColors[risk] || riskColors.MEDIUM
+  doc.setFillColor(...rc)
+  doc.rect(0, 28, 210, 18, 'F')
+  doc.setTextColor(255,255,255)
+  doc.setFontSize(14)
+  doc.setFont('helvetica', 'bold')
+  doc.text(risk + ' — Score: ' + score + '/100', 14, 40)
+  if (leaf?.commonName) { doc.setFontSize(10); doc.setFont('helvetica', 'normal'); doc.text(leaf.commonName, 130, 40) }
+
+  let y = 58
+
+  // Cert details table
+  doc.setTextColor(...dark)
+  doc.setFontSize(11)
+  doc.setFont('helvetica', 'bold')
+  doc.text('Certificate Details', 14, y); y += 6
+
+  doc.setDrawColor(...[226,232,240])
+  doc.setLineWidth(0.3)
+
+  const rows = [
+    ['Common Name', leaf?.commonName || '—'],
+    ['Organisation', leaf?.org || '—'],
+    ['Issuer', leaf?.issuerCN || '—'],
+    ['Valid From', leaf?.notBefore ? new Date(leaf.notBefore).toLocaleDateString() : '—'],
+    ['Valid To', leaf?.notAfter ? new Date(leaf.notAfter).toLocaleDateString() : '—'],
+    ['Days Remaining', leaf?.daysLeft != null ? (leaf.daysLeft < 0 ? 'EXPIRED' : leaf.daysLeft + ' days') : '—'],
+    ['Key Type', leaf?.keyType || '—'],
+    ['Signature Algorithm', leaf?.sigAlgo || '—'],
+    ['Serial Number', leaf?.serial || '—'],
+    ['Chain Depth', String(certs.length)],
+  ]
+
+  rows.forEach(([label, value], i) => {
+    const rowY = y + i * 8
+    if (i % 2 === 0) { doc.setFillColor(248,250,252); doc.rect(14, rowY - 4, 182, 8, 'F') }
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...gray)
+    doc.text(label, 16, rowY)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...dark)
+    doc.text(String(value).slice(0, 60), 80, rowY)
+  })
+
+  y += rows.length * 8 + 10
+
+  // Findings
+  if (y > 230) { doc.addPage(); y = 20 }
+  doc.setFontSize(11)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(...dark)
+  doc.text('Findings & Recommendations', 14, y); y += 8
+
+  const findingColors = { ok: [22,163,74], warn: [217,119,6], bad: [220,38,38], info: [37,99,235] }
+  findings.forEach((f, i) => {
+    if (y > 260) { doc.addPage(); y = 20 }
+    const fc = findingColors[f.type] || findingColors.info
+    doc.setFillColor(...fc)
+    doc.rect(14, y - 3, 3, 8, 'F')
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...dark)
+    doc.text(f.title.slice(0, 80), 20, y + 2)
+    if (f.why) {
+      y += 6
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(...gray)
+      doc.text(f.why.slice(0, 90), 20, y + 2)
+    }
+    y += 10
+  })
+
+  // Footer
+  const pageCount = doc.internal.getNumberOfPages()
+  for (let p = 1; p <= pageCount; p++) {
+    doc.setPage(p)
+    doc.setFillColor(...dark)
+    doc.rect(0, 285, 210, 12, 'F')
+    doc.setTextColor(...[100,116,139])
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'normal')
+    doc.text('EasySecurity.in · Certificate Intelligence · easysecurity.in', 14, 292)
+    doc.text('Page ' + p + ' of ' + pageCount, 185, 292)
+  }
+
+  doc.save('easycerts-report-' + (leaf?.commonName || 'scan').replace(/[^a-z0-9]/gi, '-') + '.pdf')
+}
 
 const RISK_COLORS = {
   SECURE: { bg: '#f0fdf4', border: '#bbf7d0', color: '#16a34a', dot: '#16a34a' },
@@ -150,10 +263,7 @@ export default function ScanResult({ result, onReset }) {
         <button className="btn btn-secondary btn-sm" onClick={onReset}>← New Scan</button>
         <button className="btn btn-secondary btn-sm" onClick={() => window.open('/compare', '_blank')}>⚖ Compare</button>
         <button className="btn btn-secondary btn-sm" onClick={() => window.open('/renew', '_blank')}>🔄 Renew</button>
-        <button className="btn btn-primary btn-sm" onClick={() => {
-          const text = `EasyCerts Scan Report\n${'='.repeat(40)}\nRisk: ${risk} | Score: ${score}\nDomain: ${certs[0]?.commonName}\nExpiry: ${certs[0]?.notAfter?.toLocaleDateString()}\nDays Left: ${certs[0]?.daysLeft}\nKey: ${certs[0]?.keyType}\nAlgo: ${certs[0]?.sigAlgo}\n\nFindings:\n${findings.map(f => `• ${f.title}\n  ${f.why}${f.fix ? '\n  Fix: ' + f.fix : ''}`).join('\n\n')}`
-          downloadText(text, 'easycerts-report.txt')
-        }}>⬇ Download Report</button>
+        <button className="btn btn-primary btn-sm" onClick={() => generatePDF(result)}>⬇ Download PDF Report</button>
       </div>
     </div>
   )

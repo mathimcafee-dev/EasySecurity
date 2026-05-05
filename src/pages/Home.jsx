@@ -20,6 +20,16 @@ export default function Home({ setScanContext }) {
   const nav = useNavigate()
   const fileRef = useRef()
   const [tab, setTab] = useState('upload')
+
+  // Auto-load cert from JKS inspector
+  useEffect(() => {
+    const jksPem = sessionStorage.getItem('ec_scan_pem')
+    if (jksPem) {
+      sessionStorage.removeItem('ec_scan_pem')
+      setPem(jksPem)
+      analyze(jksPem)
+    }
+  }, [])
   const [domain, setDomain] = useState('')
   const [pem, setPem] = useState('')
   const [loading, setLoading] = useState(false)
@@ -59,37 +69,29 @@ export default function Home({ setScanContext }) {
     setError(''); setLoading(true)
     try {
       const clean = domain.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '')
-      // Use a CORS-friendly approach: fetch cert chain via crt.sh or show DNS info
-      const res = await fetch(`https://dns.google/resolve?name=${encodeURIComponent(clean)}&type=1`)
-      const dns = await res.json()
-      if (dns.Status !== 0 || !dns.Answer?.length) throw new Error(`Could not resolve ${clean}. Check the domain name.`)
-      
-      // Simulate a TLS scan result with DNS data
-      const ip = dns.Answer?.[0]?.data || 'unknown'
-      const mockCert = {
-        commonName: clean,
-        org: '',
-        ou: '',
-        issuerCN: 'Live TLS — Certificate fetched from server',
-        issuerOrg: '',
-        notBefore: new Date(),
-        notAfter: new Date(Date.now() + 90 * 86400000),
-        daysLeft: 90,
-        serial: 'Live',
-        version: 3,
-        sigAlgo: 'SHA256withRSA',
-        keyType: 'RSA-2048',
-        fingerprint: 'Live scan — see browser certificate details',
-        sans: [clean, `www.${clean}`],
-        keyUsage: ['Server Auth'],
-        isSelfSigned: false,
-        isWildcard: clean.startsWith('*.'),
-        isCA: false,
-      }
-      const { score, risk, findings } = scoreAndRisk([mockCert])
-      const r = { certs: [mockCert], score, risk, findings: [...findings, { type: 'info', title: `DNS resolved to ${ip}`, why: `A record found. Live TLS scan limited to DNS verification in browser context.`, impact: '', fix: `For full chain analysis, run:\nopenssl s_client -connect ${clean}:443 -showcerts` }], source: 'tls' }
+      const portMatch = clean.match(/:(\d+)$/)
+      const host = portMatch ? clean.replace(/:(\d+)$/, '') : clean
+      const port = portMatch ? parseInt(portMatch[1]) : 443
+
+      const res = await fetch('https://zwgdpsuvduexcdzcwjau.supabase.co/functions/v1/tls-scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: host, port })
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error || 'TLS scan failed')
+
+      // Parse dates from strings returned by edge function
+      const certs = (data.certs || []).map(c => ({
+        ...c,
+        notBefore: c.notBefore ? new Date(c.notBefore) : null,
+        notAfter: c.notAfter ? new Date(c.notAfter) : null,
+      }))
+
+      const { score, risk, findings } = scoreAndRisk(certs)
+      const r = { certs, score, risk, findings, source: 'tls', chainDepth: data.chainDepth }
       setResult(r)
-      setScanContext?.({ risk, score, cn: clean, daysLeft: 90, findings: findings.map(f => f.title) })
+      setScanContext?.({ risk, score, cn: host, daysLeft: certs[0]?.daysLeft, findings: findings.map(f => f.title) })
     } catch (e) {
       setError(e.message)
     }
