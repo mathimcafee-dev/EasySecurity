@@ -70,8 +70,6 @@ export default function FreeSSL() {
   const [step, setStep] = useState(0)
   const [domain, setDomain] = useState('')
   const [sessionId] = useState(() => {
-    const stored = localStorage.getItem('ec_ssl_session')
-    if (stored) return stored
     const id = genSessionId()
     localStorage.setItem('ec_ssl_session', id)
     return id
@@ -86,20 +84,9 @@ export default function FreeSSL() {
   const [copied, setCopied] = useState('')
   const [polling, setPolling] = useState(false)
 
-  // Restore state on refresh
+  // Always start fresh - clear any stale state
   useEffect(() => {
-    const saved = localStorage.getItem('ec_ssl_state')
-    if (saved) {
-      try {
-        const s = JSON.parse(saved)
-        if (s.step && s.step > 0) {
-          if (s.domain) setDomain(s.domain)
-          if (s.challengeInfo) setChallengeInfo(s.challengeInfo)
-          if (s.step <= 2) setStep(s.step)
-          setAgreed(true)
-        }
-      } catch {}
-    }
+    localStorage.removeItem('ec_ssl_state')
   }, [])
   const [dnsCheckResult, setDnsCheckResult] = useState(null)
   const [agreed, setAgreed] = useState(false)
