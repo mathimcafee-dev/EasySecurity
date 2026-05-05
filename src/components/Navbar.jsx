@@ -39,7 +39,7 @@ export default function Navbar() {
             <button className="btn btn-secondary btn-sm" onClick={() => signOut()}>Sign out</button>
           </>
         ) : (
-          <button className="btn btn-secondary btn-sm" onClick={() => () => window.location.href = "/auth"()}>Sign in →</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => window.location.href = "/auth"}>Sign in →</button>
         )}
       </div>
     </nav>
