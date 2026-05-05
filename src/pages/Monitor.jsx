@@ -35,7 +35,8 @@ export default function Monitor() {
   const [domains, setDomains] = useState([])
   const [fetching, setFetching] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
-  const [certRequest, setCertRequest] = useState({}) // { domain: { step, txtValue, challengeDomain, sessionId, loading, error } }
+  const [certRequest, setCertRequest] = useState({})
+  const [selectedDomain, setSelectedDomain] = useState(null) // { domain: { step, txtValue, challengeDomain, sessionId, loading, error } }
   const [scanning, setScanning] = useState({})
   const [alerts, setAlerts] = useState([])
 
@@ -151,6 +152,17 @@ export default function Monitor() {
         await new Promise(r => setTimeout(r, 3000))
       }
       if (!result) throw new Error('Certificate not ready. Try again.')
+      // Save private key and cert to DB for later retrieval
+      await supabase.from('ec_monitored_domains').update({
+        cert_private_key: result.privateKey,
+        cert_pem: result.cert,
+        cert_issued_at: new Date().toISOString(),
+        cert_expiry: new Date(Date.now() + 90 * 86400000).toISOString(),
+        cert_start: new Date().toISOString(),
+        last_days_left: 90,
+        last_algorithm: 'ECDSA P-256'
+      }).eq('user_id', user.id).eq('domain', domain)
+      await load()
       setCertRequest(r => ({ ...r, [domain]: { ...r[domain], step: 'done', loading: false, cert: result } }))
     } catch(e) {
       setCertRequest(r => ({ ...r, [domain]: { ...r[domain], loading: false, error: e.message } }))
@@ -208,7 +220,13 @@ export default function Monitor() {
             <tbody>
               {domains.map(d => (
                 <tr key={d.id}>
-                  <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{d.domain}</td>
+                  <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>
+                    <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--teal)', textDecoration: 'underline', padding: 0 }}
+                      onClick={() => setSelectedDomain(selectedDomain === d.domain ? null : d.domain)}>
+                      {d.domain}
+                    </button>
+                    {d.cert_private_key && <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--green)', fontFamily: 'var(--sans)' }}>🔑</span>}
+                  </td>
                   <td style={{ fontSize: 12, color: 'var(--text-3)' }}>
                     {d.cert_start ? new Date(d.cert_start).toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'}) : '—'}
                   </td>
@@ -294,6 +312,60 @@ export default function Monitor() {
         </div>
       )}
 
+      {/* Domain detail modal */}
+      {selectedDomain && (() => {
+        const d = domains.find(x => x.domain === selectedDomain)
+        if (!d) return null
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+            onClick={() => setSelectedDomain(null)}>
+            <div style={{ background: 'var(--bg)', borderRadius: 'var(--radius)', padding: 24, maxWidth: 600, width: '100%', maxHeight: '80vh', overflow: 'auto' }}
+              onClick={e => e.stopPropagation()}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <div style={{ fontWeight: 700, fontSize: 16 }}>🌐 {d.domain}</div>
+                <button className="btn btn-ghost btn-sm" onClick={() => setSelectedDomain(null)}>✕</button>
+              </div>
+              {/* Cert info */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+                {[
+                  ['Valid From', d.cert_start ? new Date(d.cert_start).toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'}) : '—'],
+                  ['Expires On', d.cert_expiry ? new Date(d.cert_expiry).toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'}) : '—'],
+                  ['Days Left', d.last_days_left != null ? d.last_days_left + ' days' : '—'],
+                  ['Algorithm', d.last_algorithm || '—'],
+                  ['Risk Level', d.last_risk_level || '—'],
+                  ['Issued At', d.cert_issued_at ? new Date(d.cert_issued_at).toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'}) : '—'],
+                ].map(([label, value]) => (
+                  <div key={label} style={{ background: 'var(--slate-9)', borderRadius: 6, padding: '10px 14px', border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>{label}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+              {d.cert_private_key ? (
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 13 }}>🔑 Private Key</div>
+                  <div className="alert alert-warning" style={{ marginBottom: 10, fontSize: 12 }}>
+                    ⚠ Keep this private. Never share it. This was generated when you requested the cert from this portal.
+                  </div>
+                  <div style={{ background: 'var(--slate-10)', borderRadius: 6, padding: 12, fontFamily: 'var(--mono)', fontSize: 10, maxHeight: 150, overflow: 'auto', border: '1px solid var(--border)', marginBottom: 10, wordBreak: 'break-all' }}>
+                    {d.cert_private_key}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button className="btn btn-primary btn-sm" onClick={() => { const a=document.createElement('a'); a.href='data:text/plain,'+encodeURIComponent(d.cert_private_key); a.download=d.domain+'-key.pem'; a.click() }}>⬇ Download key.pem</button>
+                    {d.cert_pem && <button className="btn btn-secondary btn-sm" onClick={() => { const a=document.createElement('a'); a.href='data:text/plain,'+encodeURIComponent(d.cert_pem); a.download=d.domain+'-cert.pem'; a.click() }}>⬇ Download cert.pem</button>}
+                    <button className="btn btn-ghost btn-sm" onClick={() => navigator.clipboard.writeText(d.cert_private_key)}>📋 Copy Key</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="alert alert-teal" style={{ fontSize: 13 }}>
+                  🔒 No private key stored — this domain was not issued through this portal, or the certificate was requested before key storage was added.<br/>
+                  Click <strong>🔒 Request Cert</strong> to issue a new free certificate and store the key.
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
       {showAdd && <AddDomainModal onAdd={addDomain} onClose={() => setShowAdd(false)} />}
     </div>
   )
