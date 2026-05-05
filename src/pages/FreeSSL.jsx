@@ -69,7 +69,13 @@ const DNS_GUIDES = {
 export default function FreeSSL() {
   const [step, setStep] = useState(0)
   const [domain, setDomain] = useState('')
-  const [sessionId] = useState(genSessionId)
+  const [sessionId] = useState(() => {
+    const stored = localStorage.getItem('ec_ssl_session')
+    if (stored) return stored
+    const id = genSessionId()
+    localStorage.setItem('ec_ssl_session', id)
+    return id
+  })
   const [staging, setStaging] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -79,6 +85,22 @@ export default function FreeSSL() {
   const [certResult, setCertResult] = useState(null)
   const [copied, setCopied] = useState('')
   const [polling, setPolling] = useState(false)
+
+  // Restore state on refresh
+  useEffect(() => {
+    const saved = localStorage.getItem('ec_ssl_state')
+    if (saved) {
+      try {
+        const s = JSON.parse(saved)
+        if (s.step && s.step > 0) {
+          if (s.domain) setDomain(s.domain)
+          if (s.challengeInfo) setChallengeInfo(s.challengeInfo)
+          if (s.step <= 2) setStep(s.step)
+          setAgreed(true)
+        }
+      } catch {}
+    }
+  }, [])
   const [dnsCheckResult, setDnsCheckResult] = useState(null)
   const [agreed, setAgreed] = useState(false)
 
@@ -107,6 +129,7 @@ export default function FreeSSL() {
     setLoading(false)
     if (data.error) { setError(data.error); return }
     setChallengeInfo(data)
+    localStorage.setItem('ec_ssl_state', JSON.stringify({ step: 1, domain: domain.trim().replace(/^https?:\/\//, '').replace(/\/.*/, ''), challengeInfo: data }))
     setStep(1)
   }
 
@@ -119,6 +142,7 @@ export default function FreeSSL() {
     setDnsCheckResult(data)
     if (data.verified) {
       setVerifyStatus('verified')
+      localStorage.setItem('ec_ssl_state', JSON.stringify({ step: 2, domain: domain.trim().replace(/^https?:\/\//, '').replace(/\/.*/, '') }))
       setStep(2)
     } else {
       setVerifyStatus('not_found')
@@ -420,7 +444,7 @@ export default function FreeSSL() {
             }}>⬇ Download All Files</button>
             <button className="btn btn-secondary" onClick={() => window.open('/convert', '_blank')}>🔄 Convert to PFX/JKS</button>
             <button className="btn btn-secondary" onClick={() => window.open('/monitor', '_blank')}>📅 Add to Monitor</button>
-            <button className="btn btn-secondary" onClick={() => { setStep(0); setDomain(''); setCertResult(null); setChallengeInfo(null) }}>🔄 Issue Another</button>
+            <button className="btn btn-secondary" onClick={() => { localStorage.removeItem('ec_ssl_session'); setStep(0); setDomain(''); setCertResult(null); setChallengeInfo(null); window.location.reload() }}>🔄 Issue Another</button>
           </div>
 
           <div className="alert alert-teal" style={{ marginTop: 16 }}>
