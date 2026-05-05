@@ -97,8 +97,9 @@ export default async function handler(req, res) {
 
       const dnsData = await (await fetch(`https://dns.google/resolve?name=${encodeURIComponent(row.challenge_domain)}&type=TXT`)).json()
       const txts = (dnsData.Answer||[]).map(r => r.data?.replace(/"/g,''))
-      const { createHash } = await import('crypto')
-      const exp = createHash('sha256').update(row.challenge_key_auth).digest('base64url')
+      // acme-client's getChallengeKeyAuthorization for dns-01 already returns
+      // the base64url(sha256(keyAuth)) value — this IS the DNS TXT value directly
+      const exp = row.challenge_key_auth
 
       if (!txts.some(t => t === exp)) {
         // Try re-adding via Vercel API
