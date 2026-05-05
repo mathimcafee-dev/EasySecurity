@@ -36,7 +36,12 @@ export default function Monitor() {
   const [fetching, setFetching] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const [certRequest, setCertRequest] = useState({})
-  const [selectedDomain, setSelectedDomain] = useState(null) // { domain: { step, txtValue, challengeDomain, sessionId, loading, error } }
+  const [selectedDomain, setSelectedDomain] = useState(null)
+  const [dnsProvider, setDnsProvider] = useState('manual')
+  const [providerKey, setProviderKey] = useState('')
+  const [providerSecret, setProviderSecret] = useState('')
+  const [providerStatus, setProviderStatus] = useState(null)
+  const [providerMsg, setProviderMsg] = useState('') // { domain: { step, txtValue, challengeDomain, sessionId, loading, error } }
   const [scanning, setScanning] = useState({})
   const [alerts, setAlerts] = useState([])
 
@@ -107,7 +112,26 @@ export default function Monitor() {
     setScanning(s => { const n = { ...s }; delete n[domain]; return n })
   }
 
+  const verifyProvider = async (domain) => {
+    if (!providerKey) return
+    setProviderStatus('verifying'); setProviderMsg('')
+    try {
+      const res = await fetch('/api/dns-provider', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'verify', provider: dnsProvider, apiKey: providerKey, apiSecret: providerSecret, domain })
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setProviderStatus('verified')
+      setProviderMsg(dnsProvider === 'cloudflare' ? `✅ Zone: ${data.zoneName}` : `✅ Domain: ${data.domain}`)
+    } catch(e) {
+      setProviderStatus('error')
+      setProviderMsg('❌ ' + e.message)
+    }
+  }
+
   const requestCert = async (domain) => {
+    if (!user) return
     const sessionId = crypto.randomUUID().replace(/-/g,'')
     setCertRequest(r => ({ ...r, [domain]: { step: 'loading', loading: true, error: null } }))
     try {
@@ -118,7 +142,20 @@ export default function Monitor() {
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
-      setCertRequest(r => ({ ...r, [domain]: { step: 'dns', loading: false, txtValue: data.txtValue, challengeDomain: data.challengeDomain, sessionId, autoAdded: data.autoAdded } }))
+      // Auto-add DNS if provider configured and verified
+      let autoAdded = data.autoAdded || false
+      let autoProvider = 'vercel'
+      if (dnsProvider !== 'manual' && providerStatus === 'verified' && providerKey) {
+        try {
+          const dnsRes = await fetch('/api/dns-provider', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'add_txt', provider: dnsProvider, apiKey: providerKey, apiSecret: providerSecret, domain, txtValue: data.txtValue })
+          })
+          const dnsData = await dnsRes.json()
+          if (dnsData.ok) { autoAdded = true; autoProvider = dnsProvider }
+        } catch(e) { console.log('Auto DNS failed:', e.message) }
+      }
+      setCertRequest(r => ({ ...r, [domain]: { step: 'dns', loading: false, txtValue: data.txtValue, challengeDomain: data.challengeDomain, sessionId, autoAdded, autoProvider } }))
     } catch(e) {
       setCertRequest(r => ({ ...r, [domain]: { step: 'error', loading: false, error: e.message } }))
     }
@@ -250,7 +287,9 @@ export default function Monitor() {
                     <div style={{ display: 'flex', gap: 4 }}>
                       <button className="btn btn-ghost btn-sm" title="Scan now" onClick={() => triggerScan(d.domain)} disabled={scanning[d.domain]}>{scanning[d.domain] ? <span className="spinner"></span> : '🔄'}</button>
                       <button className="btn btn-ghost btn-sm" title="View in scanner" onClick={() => window.open(`/?domain=${d.domain}`)}>🔍</button>
-                      <button className="btn btn-primary btn-sm" title="Request free SSL certificate" onClick={() => requestCert(d.domain)} disabled={certRequest[d.domain]?.loading}>🔒 Request Cert</button>
+                      <button className="btn btn-primary btn-sm" title="Request free SSL certificate"
+                        onClick={() => user ? requestCert(d.domain) : alert('Please log in to request certificates')}
+                        disabled={certRequest[d.domain]?.loading}>🔒 Request Cert</button>
                       <button className="btn btn-danger btn-sm" onClick={() => removeDomain(d.id)}>✕</button>
                     </div>
                   </td>
@@ -272,11 +311,53 @@ export default function Monitor() {
                 {req.step === 'error' && <div className="alert alert-error">{req.error}</div>}
                 {req.step === 'dns' && (
                   <div>
+                    {/* DNS Provider selector — shown only if not auto-added */}
+                    {!req.autoAdded && (
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>DNS Verification Method</div>
+                        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                          {[['manual','✋ Manual'],['cloudflare','🟠 Cloudflare'],['godaddy','🐐 GoDaddy']].map(([val, label]) => (
+                            <button key={val} className={`btn btn-sm ${dnsProvider===val?'btn-primary':'btn-secondary'}`}
+                              onClick={() => { setDnsProvider(val); setProviderStatus(null); setProviderMsg('') }}>
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        {dnsProvider !== 'manual' && (
+                          <div style={{ background: 'var(--slate-10)', border: '1px solid var(--border)', borderRadius: 6, padding: 10, marginBottom: 10 }}>
+                            {dnsProvider === 'cloudflare' && (
+                              <input placeholder="Cloudflare API Token" value={providerKey} type="password"
+                                onChange={e => { setProviderKey(e.target.value); setProviderStatus(null) }}
+                                style={{ marginBottom: 6 }} />
+                            )}
+                            {dnsProvider === 'godaddy' && <>
+                              <input placeholder="GoDaddy API Key" value={providerKey}
+                                onChange={e => { setProviderKey(e.target.value); setProviderStatus(null) }}
+                                style={{ marginBottom: 6 }} />
+                              <input placeholder="GoDaddy API Secret" value={providerSecret} type="password"
+                                onChange={e => { setProviderSecret(e.target.value); setProviderStatus(null) }}
+                                style={{ marginBottom: 6 }} />
+                            </>}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <button className="btn btn-secondary btn-sm" onClick={() => verifyProvider(d.domain)}
+                                disabled={providerStatus === 'verifying' || !providerKey}>
+                                {providerStatus === 'verifying' ? <><span className="spinner"></span> Testing...</> : '🔍 Test & Auto-Add'}
+                              </button>
+                              {providerMsg && <span style={{ fontSize: 11, color: providerStatus === 'verified' ? 'var(--green)' : 'var(--red)' }}>{providerMsg}</span>}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {/* Auto-added success */}
                     {req.autoAdded
-                      ? <div className="alert alert-success" style={{ marginBottom: 12 }}>✅ DNS record auto-added via Vercel! Click Verify below.</div>
-                      : <div style={{ marginBottom: 12 }}>
+                      ? <div className="alert alert-success" style={{ marginBottom: 12 }}>
+                          🚀 DNS record auto-added via {req.autoProvider === 'cloudflare' ? 'Cloudflare' : req.autoProvider === 'godaddy' ? 'GoDaddy' : 'Vercel'}! Click Verify below.
+                        </div>
+                      : dnsProvider === 'manual' && (
+                        <div style={{ marginBottom: 12 }}>
                           <div className="alert alert-teal" style={{ marginBottom: 8 }}>Add this TXT record to your DNS then click Verify:</div>
-                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: 'var(--slate-10)', borderRadius: 6, padding: '10px 12px', border: '1px solid var(--border)', marginBottom: 8 }}>
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: 'var(--slate-10)', borderRadius: 6, padding: '10px 12px', border: '1px solid var(--border)', marginBottom: 6 }}>
                             <div style={{ fontSize: 11, color: 'var(--text-3)', minWidth: 60 }}>Name</div>
                             <div style={{ fontFamily: 'var(--mono)', fontSize: 12, flex: 1 }}>_acme-challenge</div>
                             <button className="btn btn-ghost btn-sm" onClick={() => navigator.clipboard.writeText('_acme-challenge')}>📋</button>
@@ -287,6 +368,7 @@ export default function Monitor() {
                             <button className="btn btn-ghost btn-sm" onClick={() => navigator.clipboard.writeText(req.txtValue)}>📋</button>
                           </div>
                         </div>
+                      )
                     }
                     {req.error && <div className="alert alert-error" style={{ marginBottom: 8 }}>{req.error}</div>}
                     <button className="btn btn-primary" onClick={() => verifyCert(d.domain)} disabled={req.loading}>
