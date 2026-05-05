@@ -38,6 +38,10 @@ export default function Monitor() {
   const [showAdd, setShowAdd] = useState(false)
   const [certRequest, setCertRequest] = useState({})
   const [selectedDomain, setSelectedDomain] = useState(null)
+  const [revokeModal, setRevokeModal] = useState(null) // { domain, issuer }
+  const [revokeReason, setRevokeReason] = useState('Key Compromise')
+  const [revoking, setRevoking] = useState(false)
+  const [revokeResult, setRevokeResult] = useState(null)
   const [dnsProvider, setDnsProvider] = useState('manual')
   const [showBulkImport, setShowBulkImport] = useState(false)
   const [bulkText, setBulkText] = useState('')
@@ -159,6 +163,30 @@ export default function Monitor() {
       reader.onload = (e) => handleBulkImport(e.target.result)
       reader.readAsText(file)
     }
+  }
+
+  const handleRevoke = async () => {
+    if (!revokeModal || !user) return
+    setRevoking(true); setRevokeResult(null)
+    try {
+      const res = await fetch('/api/revoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          domain: revokeModal.domain,
+          reason: revokeReason,
+          userId: user.id,
+          userEmail: user.email
+        })
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setRevokeResult(data)
+      await load()
+    } catch(e) {
+      setRevokeResult({ ok: false, message: e.message })
+    }
+    setRevoking(false)
   }
 
   const verifyProvider = async (domain) => {
@@ -353,7 +381,14 @@ export default function Monitor() {
                       <button className="btn btn-primary btn-sm" title="Request free SSL certificate"
                         onClick={() => user ? requestCert(d.domain) : alert('Please log in to request certificates')}
                         disabled={certRequest[d.domain]?.loading}>🔒 Request Cert</button>
-                      <button className="btn btn-danger btn-sm" onClick={() => removeDomain(d.id)}>✕</button>
+                      {d.cert_revoked_at
+                        ? <span style={{ fontSize: 11, color: 'var(--red)', fontWeight: 700 }}>🔴 Revoked</span>
+                        : <button className="btn btn-danger btn-sm" title="Revoke certificate"
+                            onClick={() => { setRevokeModal({ domain: d.domain, issuer: d.last_algorithm || '' }); setRevokeResult(null) }}>
+                            🔴 Revoke
+                          </button>
+                      }
+                      <button className="btn btn-danger btn-sm" onClick={() => removeDomain(d.id)} title="Remove from monitor">✕</button>
                     </div>
                   </td>
                 </tr>
@@ -511,6 +546,71 @@ export default function Monitor() {
           </div>
         )
       })()}
+      {/* Revoke Certificate Modal */}
+      {revokeModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.6)', zIndex:400, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+          onClick={() => !revoking && setRevokeModal(null)}>
+          <div className="card" style={{ width:480, boxShadow:'0 20px 60px rgba(0,0,0,.3)' }} onClick={e => e.stopPropagation()}>
+            {revokeResult ? (
+              <div>
+                <div style={{ fontSize: 32, textAlign:'center', marginBottom: 12 }}>
+                  {revokeResult.ok ? '✅' : '❌'}
+                </div>
+                <div className={`alert ${revokeResult.ok ? 'alert-success' : 'alert-error'}`} style={{ marginBottom: 16 }}>
+                  {revokeResult.message}
+                </div>
+                {revokeResult.details && (
+                  <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 16, lineHeight: 1.6 }}>
+                    {revokeResult.details}
+                  </div>
+                )}
+                {revokeResult.ok && (
+                  <div style={{ background: 'var(--slate-9)', borderRadius: 'var(--radius-sm)', padding: 12, fontSize: 12, color: 'var(--text-3)', marginBottom: 16 }}>
+                    <strong>Next steps:</strong> Issue a new certificate immediately to avoid downtime. Use the <strong>🔒 Request Cert</strong> button on this page.
+                  </div>
+                )}
+                <button className="btn btn-secondary" style={{ width:'100%' }} onClick={() => setRevokeModal(null)}>Close</button>
+              </div>
+            ) : (
+              <div>
+                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
+                  <div style={{ fontSize:24 }}>🔴</div>
+                  <div>
+                    <div style={{ fontWeight:700, fontSize:15 }}>Revoke Certificate</div>
+                    <div style={{ fontSize:12, color:'var(--text-3)' }}>{revokeModal.domain}</div>
+                  </div>
+                </div>
+                <div className="alert alert-error" style={{ marginBottom:16 }}>
+                  ⚠ Revoking is permanent and cannot be undone. The certificate will be invalidated globally. Issue a new certificate immediately after.
+                </div>
+                <div className="form-group" style={{ marginBottom:16 }}>
+                  <label>Revocation Reason</label>
+                  <select value={revokeReason} onChange={e => setRevokeReason(e.target.value)}>
+                    <option>Key Compromise</option>
+                    <option>CA Compromise</option>
+                    <option>Affiliation Changed</option>
+                    <option>Superseded</option>
+                    <option>Cessation of Operation</option>
+                    <option>Certificate Hold</option>
+                  </select>
+                </div>
+                <div style={{ fontSize:12, color:'var(--text-3)', marginBottom:16, lineHeight:1.6 }}>
+                  {revokeModal.issuer?.includes('ECDSA') || !revokeModal.issuer
+                    ? "✅ This Let's Encrypt certificate will be revoked via ACME API and you'll receive email instructions."
+                    : `📧 You'll receive an email at ${user?.email} with step-by-step instructions to revoke with your CA.`
+                  }
+                </div>
+                <div style={{ display:'flex', gap:8 }}>
+                  <button className="btn btn-danger" onClick={handleRevoke} disabled={revoking} style={{ flex:1 }}>
+                    {revoking ? <><span className="spinner"></span> Processing...</> : '🔴 Confirm Revocation'}
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => setRevokeModal(null)} disabled={revoking}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {/* Bulk Import Modal */}
       {showBulkImport && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
