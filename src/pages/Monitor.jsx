@@ -78,7 +78,15 @@ export default function Monitor() {
       const res = await dnsLookup(d, 'A')
       const risk = res.status === 0 ? 'SECURE' : 'MEDIUM'
       const daysLeft = 90
-      await supabase.from('ec_monitored_domains').update({ last_scanned_at: new Date().toISOString(), last_risk_level: risk, last_score: 85, last_days_left: daysLeft, last_algorithm: 'RSA-2048 / SHA-256' }).eq('user_id', user.id).eq('domain', d)
+      const certStart = certs[0]?.notBefore ? new Date(certs[0].notBefore) : null
+      const certExpiry = certs[0]?.notAfter ? new Date(certs[0].notAfter) : null
+      await supabase.from('ec_monitored_domains').update({ 
+        last_scanned_at: new Date().toISOString(), 
+        last_risk_level: risk, last_score: 85, last_days_left: daysLeft, 
+        last_algorithm: certs[0]?.sigAlgo || 'RSA-2048 / SHA-256',
+        cert_start: certStart?.toISOString() || null,
+        cert_expiry: certExpiry?.toISOString() || null
+      }).eq('user_id', user.id).eq('domain', d)
       await supabase.from('ec_scan_history').insert({ user_id: user.id, domain: d, risk_level: risk, score: 85, days_left: daysLeft, common_name: d })
       await load()
       if (daysLeft < 30) setAlerts(a => [...a, { id: Date.now(), msg: `${d} expires in ${daysLeft} days`, risk: daysLeft < 7 ? 'CRITICAL' : 'HIGH' }])
@@ -133,12 +141,21 @@ export default function Monitor() {
       ) : (
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           <table className="data-table">
-            <thead><tr><th>Domain</th><th>Last Scanned</th><th>Days Left</th><th>Risk</th><th>Score</th><th>Algorithm</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Domain</th><th>Valid From</th><th>Expires On</th><th>Days Left</th><th>Risk</th><th>Algorithm</th><th>Actions</th></tr></thead>
             <tbody>
               {domains.map(d => (
                 <tr key={d.id}>
                   <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{d.domain}</td>
-                  <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{d.last_scanned_at ? new Date(d.last_scanned_at).toLocaleString() : 'Never'}</td>
+                  <td style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                    {d.cert_start ? new Date(d.cert_start).toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'}) : '—'}
+                  </td>
+                  <td style={{ fontSize: 12 }}>
+                    {d.cert_expiry ? (
+                      <span style={{ fontWeight: 600, color: new Date(d.cert_expiry) < new Date() ? 'var(--red)' : new Date(d.cert_expiry) < new Date(Date.now() + 30*86400000) ? 'var(--orange)' : 'var(--green)' }}>
+                        {new Date(d.cert_expiry).toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'})}
+                      </span>
+                    ) : '—'}
+                  </td>
                   <td>
                     {d.last_days_left != null ? (
                       <span style={{ fontWeight: 700, color: d.last_days_left < 0 ? 'var(--red)' : d.last_days_left < 30 ? 'var(--orange)' : 'var(--green)' }}>
@@ -147,7 +164,6 @@ export default function Monitor() {
                     ) : <span style={{ color: 'var(--text-4)' }}>—</span>}
                   </td>
                   <td><RiskBadge risk={d.last_risk_level} /></td>
-                  <td style={{ fontWeight: 600 }}>{d.last_score || '—'}</td>
                   <td style={{ fontSize: 12, fontFamily: 'var(--mono)' }}>{d.last_algorithm || '—'}</td>
                   <td>
                     <div style={{ display: 'flex', gap: 4 }}>

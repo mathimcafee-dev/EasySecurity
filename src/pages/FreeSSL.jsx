@@ -342,8 +342,20 @@ export default function FreeSSL() {
                   window.location.href = '/monitor'
                   return
                 }
+                const certExpiry = new Date(Date.now() + 90 * 86400000)
+                const certStart = new Date()
                 const { error } = await supabase.from('ec_monitored_domains')
-                  .upsert({ user_id: user.id, domain: certResult.domain, alert_threshold_days: 30, scan_interval_hours: 24 }, { onConflict: 'user_id,domain' })
+                  .upsert({ 
+                    user_id: user.id, 
+                    domain: certResult.domain, 
+                    alert_threshold_days: 30, 
+                    scan_interval_hours: 24,
+                    cert_start: certStart.toISOString(),
+                    cert_expiry: certExpiry.toISOString(),
+                    last_days_left: 90,
+                    last_algorithm: 'ECDSA P-256',
+                    last_scanned_at: new Date().toISOString()
+                  }, { onConflict: 'user_id,domain' })
                 if (error) throw error
                 window.location.href = '/monitor'
               } catch(e) {
