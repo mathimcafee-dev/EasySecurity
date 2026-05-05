@@ -14,6 +14,7 @@ import { APIKeys, Docs } from './pages/APIAndDocs'
 import Notifications from './pages/Notifications'
 import JKSInspector from './pages/JKSInspector'
 import Converter from './pages/Converter'
+import FreeSSL from './pages/FreeSSL'
 import About from './pages/About'
 
 function NotFound() {
@@ -48,6 +49,7 @@ export default function App() {
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/jks" element={<JKSInspector />} />
             <Route path="/convert" element={<Converter />} />
+            <Route path="/free-ssl" element={<FreeSSL />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>

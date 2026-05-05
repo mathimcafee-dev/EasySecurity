@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.105.3",
+    "acme-client": "^5.4.0",
     "jks-js": "^1.1.6",
     "jspdf": "^4.2.1",
     "lucide-react": "^1.14.0",
