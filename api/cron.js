@@ -16,10 +16,10 @@ export default async function handler(req, res) {
   const sb = createClient(SUPABASE_URL, SUPABASE_KEY)
 
   try {
-    // Get all monitored domains with notification settings
+    // Get all monitored domains
     const { data: domains, error } = await sb
       .from('ec_monitored_domains')
-      .select('*, ec_notification_settings(email_enabled, email_address, notify_days_before)')
+      .select('*')
     
     if (error) throw error
 
@@ -59,21 +59,28 @@ export default async function handler(req, res) {
         }).eq('id', domain.id)
 
         // Send email alert if needed
-        const threshold = domain.ec_notification_settings?.notify_days_before || domain.alert_threshold_days || 30
+        const threshold = domain.alert_threshold_days || 30
         if (daysLeft <= threshold && daysLeft >= 0) {
-          await fetch('https://zwgdpsuvduexcdzcwjau.supabase.co/functions/v1/send-notification', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              type: 'expiry',
-              domain: domain.domain,
-              daysLeft,
-              risk,
-              score: Math.min(100, daysLeft + 10),
-              to: domain.ec_notification_settings?.email_address || '',
-              userId: domain.user_id
+          // Get notification settings for this user
+          const { data: notif } = await sb
+            .from('ec_notification_settings')
+            .select('email_enabled, email_address, notify_days_before')
+            .eq('user_id', domain.user_id)
+            .single()
+          if (notif?.email_enabled) {
+            await fetch('https://zwgdpsuvduexcdzcwjau.supabase.co/functions/v1/send-notification', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type: 'expiry',
+                domain: domain.domain,
+                daysLeft, risk,
+                score: Math.min(100, daysLeft + 10),
+                to: notif.email_address || '',
+                userId: domain.user_id
+              })
             })
-          })
+          }
         }
 
         results.push({ domain: domain.domain, daysLeft, risk, alerted: daysLeft <= threshold })
