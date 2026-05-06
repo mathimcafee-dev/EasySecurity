@@ -33,6 +33,7 @@ function AddDomainModal({ onAdd, onClose }) {
 
 export default function Monitor() {
   const { user, loading } = useAuth()
+  const navigate = useNavigate()
   const [domains, setDomains] = useState([])
   const [fetching, setFetching] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
