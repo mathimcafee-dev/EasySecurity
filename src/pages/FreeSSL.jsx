@@ -54,10 +54,13 @@ const DNS_GUIDES = {
 export default function FreeSSL() {
   const { user } = useAuth()
 
-  // Auto-fill domain from Renew wizard
+  const [renewCsr, setRenewCsr] = useState('')
+  // Auto-fill domain and CSR from Renew wizard
   useEffect(() => {
     const d = sessionStorage.getItem('ec_renew_domain')
+    const c = sessionStorage.getItem('ec_renew_csr')
     if (d) { setDomain(d); sessionStorage.removeItem('ec_renew_domain') }
+    if (c) { setRenewCsr(c); sessionStorage.removeItem('ec_renew_csr') }
   }, [])
   const [step, setStep] = useState(0)
   const [domain, setDomain] = useState('')
@@ -313,6 +316,18 @@ export default function FreeSSL() {
               {loading ? <><span className="spinner"></span> Preparing...</> : '🔒 Generate Free SSL →'}
             </button>
           </div>
+          {renewCsr ? (
+            <div className="card" style={{ borderColor: 'var(--teal-border)' }}>
+              <div className="card-title">📋 CSR from Renewal Wizard</div>
+              <div className="alert alert-teal" style={{ marginBottom: 10, fontSize: 12 }}>
+                Your CSR from the Renewal Wizard is ready. The certificate will be issued against this domain.
+              </div>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 10, wordBreak: 'break-all', background: 'var(--slate-10)', padding: 10, borderRadius: 6, border: '1px solid var(--border)', maxHeight: 120, overflow: 'auto', marginBottom: 10 }}>
+                {renewCsr}
+              </div>
+              <button className="btn btn-secondary btn-sm" onClick={() => navigator.clipboard.writeText(renewCsr)}>📋 Copy CSR</button>
+            </div>
+          ) : (
           <div className="card">
             <div className="card-title">ℹ️ About Free SSL</div>
             <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
@@ -327,6 +342,7 @@ export default function FreeSSL() {
               ))}
             </div>
           </div>
+          )}
         </div>
       )}
 

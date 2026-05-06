@@ -91,7 +91,7 @@ export default function RenewWizard() {
   const [csr, setCSR] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [caTab, setCaTab] = useState('digicert')
+  const [caTab, setCaTab] = useState('easysecurity')
   const [deployTab, setDeployTab] = useState('nginx')
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
@@ -166,9 +166,10 @@ export default function RenewWizard() {
                 <button className="btn btn-primary" style={{ background:'linear-gradient(135deg,#059669,#047857)' }}
                   onClick={() => {
                     sessionStorage.setItem('ec_renew_domain', form.cn)
+                    sessionStorage.setItem('ec_renew_csr', csr.csr)
                     window.location.href = '/free-ssl'
                   }}>
-                  🔒 Get Free SSL via Let's Encrypt →
+                  🔒 Get Free SSL via EasySecurity →
                 </button>
               </div>
             </>
@@ -178,16 +179,39 @@ export default function RenewWizard() {
 
       {step === 2 && (
         <div className="card">
-          <div className="card-title">Step 3 — Submit to Your CA</div>
-          <div className="tab-bar" style={{ marginBottom: 16, maxWidth: 450 }}>
-            {[['digicert','DigiCert'],['sectigo','Sectigo'],['letsencrypt',"Let's Encrypt"],['internal','Internal CA']].map(([k,l]) => (
+          <div className="card-title">Step 3 — Get Your Certificate</div>
+          <div className="tab-bar" style={{ marginBottom: 16, maxWidth: 550 }}>
+            {[['easysecurity','🔒 EasySecurity (Free)'],['digicert','DigiCert'],['sectigo','Sectigo'],['letsencrypt',"Let's Encrypt"],['internal','Internal CA']].map(([k,l]) => (
               <button key={k} className={`tab-btn ${caTab === k ? 'active' : ''}`} onClick={() => setCaTab(k)}>{l}</button>
             ))}
           </div>
-          <div className="code-block">{CA_GUIDES[caTab]?.replace('YOUR_DOMAIN', form.cn || 'example.com')}<button className="copy-btn" style={{ position: 'absolute', top: 8, right: 8 }} onClick={() => navigator.clipboard.writeText(CA_GUIDES[caTab] || '')}>Copy</button></div>
+          {caTab === 'easysecurity' ? (
+            <div>
+              <div className="alert alert-teal" style={{ marginBottom: 16 }}>
+                🔒 Get a free 90-day Let's Encrypt certificate issued directly via EasySecurity — no command-line needed. Your CSR is ready.
+              </div>
+              <div style={{ background: 'var(--slate-10)', border: '1px solid var(--border)', borderRadius: 8, padding: 14, marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)', marginBottom: 6 }}>Your CSR (ready to submit)</div>
+                <div style={{ fontFamily: 'var(--mono)', fontSize: 10, wordBreak: 'break-all', color: 'var(--text-3)', maxHeight: 80, overflow: 'auto' }}>{csr?.csr?.slice(0, 200)}...</div>
+              </div>
+              <button className="btn btn-primary btn-lg" style={{ background: 'linear-gradient(135deg,#059669,#047857)' }}
+                onClick={() => {
+                  sessionStorage.setItem('ec_renew_domain', form.cn)
+                  if (csr?.csr) sessionStorage.setItem('ec_renew_csr', csr.csr)
+                  window.location.href = '/free-ssl'
+                }}>
+                🚀 Issue Free Certificate via EasySecurity →
+              </button>
+            </div>
+          ) : (
+            <div style={{ position: 'relative' }}>
+              <div className="code-block">{CA_GUIDES[caTab]?.replace('YOUR_DOMAIN', form.cn || 'example.com')}</div>
+              <button className="copy-btn" style={{ position: 'absolute', top: 8, right: 8 }} onClick={() => navigator.clipboard.writeText(CA_GUIDES[caTab] || '')}>Copy</button>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
             <button className="btn btn-secondary" onClick={() => setStep(1)}>← Back</button>
-            <button className="btn btn-primary" onClick={() => setStep(3)}>Next: Deploy →</button>
+            {caTab !== 'easysecurity' && <button className="btn btn-primary" onClick={() => setStep(3)}>Next: Deploy →</button>}
           </div>
         </div>
       )}
