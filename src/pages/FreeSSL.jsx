@@ -3,7 +3,7 @@ import { downloadText } from '../lib/pki'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 
-const ACME_FN = '/api/acme'
+const ACME_FN = 'https://zwgdpsuvduexcdzcwjau.supabase.co/functions/v1/acme-ssl'
 const VERSION = 'v9'
 
 function genSessionId() {
