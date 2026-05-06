@@ -13,13 +13,12 @@ export default function Navbar() {
       <a className="nav-logo" href="/" onClick={e => { e.preventDefault(); nav('/') }}>
         <div className="logo-mark">
           <svg viewBox="0 0 18 18" fill="none">
-            <rect x="2" y="2" width="6" height="6" rx="1.5" fill="white" opacity=".9"/>
-            <rect x="10" y="2" width="6" height="6" rx="1.5" fill="white" opacity=".6"/>
-            <rect x="2" y="10" width="6" height="6" rx="1.5" fill="white" opacity=".6"/>
-            <rect x="10" y="10" width="6" height="6" rx="1.5" fill="white" opacity=".25"/>
+            <path d="M9 1.5L2.5 4.2v4.8c0 3.8 2.7 7.2 6.5 8.2 3.8-1 6.5-4.4 6.5-8.2V4.2L9 1.5z" fill="white" opacity=".9"/>
+            <rect x="6.5" y="10" width="5" height="4" rx="1" fill="white" opacity=".5"/>
+            <path d="M7.5 10V8.5a1.5 1.5 0 013 0V10" stroke="white" strokeWidth="1.2" strokeLinecap="round" fill="none" opacity=".8"/>
           </svg>
         </div>
-        <span className="logo-text">CertGuard</span>
+        <span className="logo-text">EasySecurity</span>
         <span className="logo-badge">easysecurity.in</span>
       </a>
 
@@ -39,7 +38,7 @@ export default function Navbar() {
             <button className="btn btn-secondary btn-sm" onClick={() => signOut()}>Sign out</button>
           </>
         ) : (
-          <button className="btn btn-secondary btn-sm" onClick={() => window.location.href = "/auth"}>Sign in →</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => nav('/auth')}>Sign in →</button>
         )}
       </div>
     </nav>

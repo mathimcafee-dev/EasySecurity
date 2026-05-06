@@ -91,7 +91,32 @@ export default function Monitor() {
     setScanning(s => ({ ...s, [domain]: true }))
     try {
       const d = domain.replace(/^https?:\/\//, '').replace(/\/.*$/, '')
-      // Call real TLS scanner to get actual certificate data
+      const domainData = domains.find(x => x.domain === d || x.domain === domain)
+
+      if (domainData?.cert_pem) {
+        // Portal-issued cert: compute from stored cert, never overwrite with live scan
+        const { parseCertPem } = await import('../lib/pki')
+        const parsed = parseCertPem(domainData.cert_pem)
+        const daysLeft = parsed.daysLeft ?? 0
+        const risk = daysLeft <= 0 ? 'CRITICAL' : daysLeft <= 7 ? 'CRITICAL' : daysLeft <= 15 ? 'HIGH' : daysLeft <= 30 ? 'MEDIUM' : 'SECURE'
+        const score = Math.min(100, Math.max(0, daysLeft))
+        await supabase.from('ec_monitored_domains').update({
+          last_scanned_at: new Date().toISOString(),
+          last_risk_level: risk,
+          last_score: score,
+          last_days_left: daysLeft,
+          last_algorithm: parsed.keyType || domainData.last_algorithm || 'ECDSA P-256',
+          cert_start: new Date(parsed.notBefore).toISOString(),
+          cert_expiry: new Date(parsed.notAfter).toISOString(),
+        }).eq('user_id', user.id).eq('domain', d)
+        await supabase.from('ec_scan_history').insert({ user_id: user.id, domain: d, risk_level: risk, score, days_left: daysLeft, common_name: parsed.commonName || d })
+        await load()
+        if (daysLeft >= 0 && daysLeft < 30) setAlerts(a => [...a, { id: Date.now(), msg: `${d} expires in ${daysLeft} days`, risk: daysLeft < 7 ? 'CRITICAL' : 'HIGH' }])
+        setScanning(s => { const n = { ...s }; delete n[domain]; return n })
+        return
+      }
+
+      // External cert: live TLS scan
       const res = await fetch('https://zwgdpsuvduexcdzcwjau.supabase.co/functions/v1/tls-scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -383,7 +408,7 @@ export default function Monitor() {
                         disabled={certRequest[d.domain]?.loading}>🔒 Request Cert</button>
                       {d.cert_revoked_at
                         ? <span style={{ fontSize: 11, color: 'var(--red)', fontWeight: 700 }}>🔴 Revoked</span>
-                        : <button className="btn btn-danger btn-sm" title="Revoke certificate"
+                        : <button className="btn btn-danger btn-sm"
                             onClick={() => { setRevokeModal({ domain: d.domain, issuer: d.last_algorithm || '' }); setRevokeResult(null) }}>
                             🔴 Revoke
                           </button>

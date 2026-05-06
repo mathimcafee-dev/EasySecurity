@@ -9,13 +9,12 @@ export default function Footer() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
             <div className="logo-mark" style={{ width: 28, height: 28, background: 'var(--teal)', borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <svg viewBox="0 0 18 18" fill="none" width="16" height="16">
-                <rect x="2" y="2" width="6" height="6" rx="1.5" fill="white" opacity=".9"/>
-                <rect x="10" y="2" width="6" height="6" rx="1.5" fill="white" opacity=".6"/>
-                <rect x="2" y="10" width="6" height="6" rx="1.5" fill="white" opacity=".6"/>
-                <rect x="10" y="10" width="6" height="6" rx="1.5" fill="white" opacity=".25"/>
+                <path d="M9 1.5L2.5 4.2v4.8c0 3.8 2.7 7.2 6.5 8.2 3.8-1 6.5-4.4 6.5-8.2V4.2L9 1.5z" fill="white" opacity=".9"/>
+                <rect x="6.5" y="10" width="5" height="4" rx="1" fill="white" opacity=".5"/>
+                <path d="M7.5 10V8.5a1.5 1.5 0 013 0V10" stroke="white" strokeWidth="1.2" strokeLinecap="round" fill="none" opacity=".8"/>
               </svg>
             </div>
-            <span style={{ fontWeight: 700, fontSize: 15 }}>EasyCerts</span>
+            <span style={{ fontWeight: 700, fontSize: 15 }}>EasySecurity</span>
           </div>
           <div className="footer-brand">Certificate intelligence for engineers who can't afford downtime.<br />All crypto runs locally in your browser — nothing is ever stored or transmitted.</div>
         </div>
@@ -41,7 +40,7 @@ export default function Footer() {
         </div>
       </div>
       <div className="footer-bottom">
-        <span>© 2026 EasyCerts · easysecurity.in · Built for SSL engineers</span>
+        <span>© 2026 EasySecurity · easysecurity.in · Built for SSL engineers</span>
         <span>🔒 Files processed in-browser — never stored or logged</span>
       </div>
     </footer>

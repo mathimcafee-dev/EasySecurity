@@ -57,9 +57,9 @@ export default function Auth() {
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--teal)', letterSpacing: '-1px', marginBottom: 4 }}>
-            🔐 EasyCerts
+            🔒 EasySecurity
           </div>
-          <div style={{ fontSize: 13, color: 'var(--text-3)' }}>Certificate Intelligence Platform</div>
+          <div style={{ fontSize: 13, color: 'var(--text-3)' }}>SSL Certificate Management Platform</div>
         </div>
 
         <div className="card">
@@ -153,7 +153,7 @@ export default function Auth() {
         </div>
 
         <div style={{ textAlign: 'center', marginTop: 20, fontSize: 12, color: 'var(--text-4)' }}>
-          🔒 EasyCerts — Secure Certificate Management
+          🔒 EasySecurity — Secure Certificate Management
         </div>
       </div>
     </div>
