@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../hooks/useAuth'
-import { supabase, signInWithGoogle } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
+import { useNavigate } from 'react-router-dom'
 
 // ─── API KEYS PAGE ────────────────────────────────────────────────────────────
 export function APIKeys() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [keys, setKeys] = useState([])
   const [label, setLabel] = useState('')
   const [newKey, setNewKey] = useState(null)
@@ -76,7 +78,7 @@ export function APIKeys() {
         <div style={{ fontSize: 48, marginBottom: 16 }}>⚙️</div>
         <div className="page-title" style={{ marginBottom: 10 }}>CI/CD API Keys</div>
         <div style={{ fontSize: 14, color: 'var(--text-3)', marginBottom: 24 }}>Sign in to generate API keys for GitHub Actions, GitLab CI, and Jenkins pipelines.</div>
-        <button className="btn btn-primary btn-lg" onClick={() => signInWithGoogle()}>Sign in with Google →</button>
+        <button className="btn btn-primary btn-lg" onClick={() => navigate('/auth', { state: { from: '/api-keys' } })}>Sign In / Create Account →</button>
       </div>
     </div>
   )
@@ -169,18 +171,18 @@ export function Docs() {
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         {[
-          ['overview', 'Overview', 'EasyCerts is a free certificate intelligence platform for engineers, security teams, and DevOps. It analyses X.509 certificates, live TLS endpoints, decodes CSRs, matches keys, converts formats, checks DNS, and monitors expiry — all in one tool.'],
+          ['overview', 'Overview', 'CertGuard is a professional certificate intelligence platform for engineers, security teams, and DevOps. It analyses X.509 certificates, live TLS endpoints, decodes CSRs, matches keys, converts formats, checks DNS, and monitors expiry — all in one tool.'],
           ['formats', 'Supported Formats', 'PEM (.pem, .crt, .cer) — Base64 X.509, single or chain bundle. PKCS#12 (.p12, .pfx) — key + cert + chain bundle, password optional. DER (.der) — Binary X.509. Live TLS — hostname, port 443 default.'],
-          ['scanner', 'Certificate Scanner', 'Upload PEM, paste cert text, or use sample certificates. EasyCerts detects: trust chain gaps, expiry risk, weak algorithms (SHA-1, RSA<2048), SAN mismatches, self-signed certs, wildcard flags. Every finding includes WHY, IMPACT, and exact fix commands.'],
-          ['tls', 'TLS Scanner', 'Enter any domain (e.g. api.example.com or host:8443). EasyCerts resolves DNS and analyses the connection. For expired/self-signed certs, EasyCerts still retrieves certificate details. Note: deep TLS handshake chain retrieval requires server-side proxy; use openssl s_client for full chain verification.'],
+          ['scanner', 'Certificate Scanner', 'Upload PEM, paste cert text, or use sample certificates. CertGuard detects: trust chain gaps, expiry risk, weak algorithms (SHA-1, RSA<2048), SAN mismatches, self-signed certs, wildcard flags. Every finding includes WHY, IMPACT, and exact fix commands.'],
+          ['tls', 'TLS Scanner', 'Enter any domain (e.g. api.example.com or host:8443). CertGuard resolves DNS and analyses the connection. For expired/self-signed certs, CertGuard still retrieves certificate details. Note: deep TLS handshake chain retrieval requires server-side proxy; use openssl s_client for full chain verification.'],
           ['results', 'Understanding Results', 'Risk banner: SECURE/LOW/MEDIUM/HIGH/CRITICAL with 0-100 score. Chain diagram: visual Leaf → Intermediate → Root. Findings cards: each issue has WHY + IMPACT + FIX terminal commands. Certificate accordion: full details per cert. PDF/text report download.'],
-          ['monitor', 'Expiry Monitor', 'Requires Google sign-in (free). Add domains with alert threshold (default 30 days) and scan interval (default 24h). Dashboard shows Days Left, Risk, Score, Algorithm. Actions: Scan now, Renew, Remove. Alerts panel for at-risk domains.'],
+          ['monitor', 'Expiry Monitor', 'Requires account sign-in (free). Add domains with alert threshold (default 30 days) and scan interval (default 24h). Dashboard shows Days Left, Risk, Score, Algorithm. Actions: Scan now, Renew, Remove. Alerts panel for at-risk domains.'],
           ['compare', 'Certificate Comparison', 'Diff two certificates across 14 fields: CN, Subject, Issuer, SANs, Valid From/To, Days Remaining, Serial, Key Type, Sig Algorithm, Fingerprint, X.509 Version. Changed rows highlighted in amber. Risk scores shown side by side.'],
           ['renew', 'Renewal Wizard', '4-step guided process: (1) Verify details — CN, O, OU, L, ST, C, SANs, key type. (2) Generate CSR + private key — browser-side via node-forge, never transmitted. (3) CA submission guide — DigiCert, Sectigo, Let\'s Encrypt, Internal CA. (4) Deploy commands — Nginx, Apache, JKS, Kubernetes, Node.js.'],
           ['api', 'CI/CD API', 'REST API for pipeline integration. Endpoints: GET /api/v1/status (health), POST /api/v1/scan/domain (scan TLS), POST /api/v1/scan/file (upload cert). Returns passed boolean + risk_level + score + days_left. HTTP 200 = passed, 422 = failed. Requires account API key.'],
           ['copilot', 'AI Copilot', 'Floating chat widget (bottom-right). Powered by Claude Haiku. Knows about: PKIX errors, JKS keystores, trust chains, OpenSSL commands, SWIFT PKI, renewal guidance. When a scan result is active, answers are specific to your actual certificate.'],
           ['risk', 'Risk Levels', 'SECURE (90-100): >180 days, full chain, RSA-2048+, SHA-256+. LOW (80-89): 90-180 days, minor issues. MEDIUM (56-79): 30-90 days, self-signed, or wildcard. HIGH (31-55): 7-30 days, RSA-1024, missing intermediate. CRITICAL (0-30): expired, <7 days, SHA-1/MD5, RSA<1024.'],
-          ['privacy', 'Privacy & Security', 'Uploaded certificates processed in-memory and discarded immediately. No certificates, keys, or passwords are stored, logged, or transmitted. Keystore passwords used only during the scan. Browser-side key generation never reaches the server. Google OAuth only — no passwords stored. Monitor data stored in Supabase under your user ID.'],
+          ['privacy', 'Privacy & Security', 'Uploaded certificates processed in-memory and discarded immediately. No certificates, keys, or passwords are stored, logged, or transmitted. Keystore passwords used only during the scan. Browser-side key generation never reaches the server. Email/password auth — credentials stored encrypted. Monitor data stored securely under your account. Email/password auth — no third-party OAuth required.'],
         ].map(([id, title, content]) => (
           <div key={id} id={`doc-${id}`} style={{ marginBottom: 32 }}>
             <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 12, color: 'var(--text)' }}>{title}</h2>

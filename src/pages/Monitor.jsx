@@ -296,16 +296,7 @@ export default function Monitor() {
     </div>
   )
 
-  if (false) return (
-    <div className="content-wrap">
-      <div style={{ textAlign: 'center', maxWidth: 440, margin: '60px auto' }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>📅</div>
-        <div className="page-title" style={{ marginBottom: 10 }}>Expiry Monitor</div>
-        <div style={{ fontSize: 14, color: 'var(--text-3)', lineHeight: 1.7, marginBottom: 24 }}>Watch multiple domains, get email alerts before certs expire. Sign in with Google — free, no password.</div>
-        <button className="btn btn-primary btn-lg" onClick={() => signInWithGoogle()}>Sign in with Google →</button>
-      </div>
-    </div>
-  )
+
 
   return (
     <div className="content-wrap">
@@ -342,11 +333,19 @@ export default function Monitor() {
           <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ Add Your First Domain</button>
         </div>
       ) : (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <table className="data-table">
-            <thead><tr><th>Domain</th><th>Valid From</th><th>Expires On</th><th>Days Left</th><th>Risk</th><th>Algorithm</th><th>Actions</th></tr></thead>
-            <tbody>
-              {domains.map(d => (
+        <div>
+          {/* Portal-issued certs */}
+          {domains.filter(d => d.source === 'portal' || d.cert_private_key).length > 0 && <>
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+              <span style={{ fontSize:11, fontWeight:700, color:'var(--teal)', textTransform:'uppercase', letterSpacing:'.6px' }}>🔒 Issued via CertGuard</span>
+              <span className="badge badge-teal">{domains.filter(d=>d.source==='portal'||d.cert_private_key).length}</span>
+              <span style={{ fontSize:11, color:'var(--text-4)' }}>— managed certificates, same cert shown on every refresh</span>
+            </div>
+            <div className="card" style={{ padding:0, overflow:'hidden', marginBottom:20, borderColor:'var(--teal-border)' }}>
+            <table className="data-table">
+              <thead><tr><th>Domain</th><th>Valid From</th><th>Expires On</th><th>Days Left</th><th>Risk</th><th>Algorithm</th><th>Actions</th></tr></thead>
+              <tbody>
+              {domains.filter(d=>d.source==='portal'||d.cert_private_key).map(d => (
                 <tr key={d.id}>
                   <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>
                     <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--teal)', textDecoration: 'underline', padding: 0 }}
@@ -376,9 +375,9 @@ export default function Monitor() {
                   <td style={{ fontSize: 12, fontFamily: 'var(--mono)' }}>{d.last_algorithm || '—'}</td>
                   <td>
                     <div style={{ display: 'flex', gap: 4 }}>
-                      <button className="btn btn-ghost btn-sm" title="Scan now" onClick={() => triggerScan(d.domain)} disabled={scanning[d.domain]}>{scanning[d.domain] ? <span className="spinner"></span> : '🔄'}</button>
-                      <button className="btn btn-ghost btn-sm" title="View in scanner" onClick={() => window.open(`/?domain=${d.domain}`)}>🔍</button>
-                      <button className="btn btn-primary btn-sm" title="Request free SSL certificate"
+                      <button className="btn btn-ghost btn-sm" onClick={() => triggerScan(d.domain)} disabled={scanning[d.domain]}>{scanning[d.domain] ? <span className="spinner"></span> : '🔄'}</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => window.open(`/?domain=${d.domain}`)}>🔍</button>
+                      <button className="btn btn-primary btn-sm"
                         onClick={() => user ? requestCert(d.domain) : alert('Please log in to request certificates')}
                         disabled={certRequest[d.domain]?.loading}>🔒 Request Cert</button>
                       {d.cert_revoked_at
@@ -388,13 +387,60 @@ export default function Monitor() {
                             🔴 Revoke
                           </button>
                       }
-                      <button className="btn btn-danger btn-sm" onClick={() => removeDomain(d.id)} title="Remove from monitor">✕</button>
+                      <button className="btn btn-danger btn-sm" onClick={() => removeDomain(d.id)}>✕</button>
                     </div>
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+            </div>
+          </>}
+          {/* External certs */}
+          {domains.filter(d => d.source !== 'portal' && !d.cert_private_key).length > 0 && <>
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+              <span style={{ fontSize:11, fontWeight:700, color:'var(--text-2)', textTransform:'uppercase', letterSpacing:'.6px' }}>🌐 External Certificates</span>
+              <span className="badge badge-neutral">{domains.filter(d=>d.source!=='portal'&&!d.cert_private_key).length}</span>
+              <span style={{ fontSize:11, color:'var(--text-4)' }}>— imported domains, scanned from live server</span>
+            </div>
+            <div style={{ background:'var(--card-bg)', border:'1px solid var(--border)', borderRadius:'var(--radius-lg)', overflow:'hidden' }}>
+            <table className="data-table">
+              <thead><tr><th>DOMAIN</th><th>VALID FROM</th><th>EXPIRES ON</th><th>DAYS LEFT</th><th>RISK</th><th>ALGORITHM</th><th>ACTIONS</th></tr></thead>
+              <tbody>
+                {domains.filter(d=>d.source!=='portal'&&!d.cert_private_key).map(d => (
+                  <tr key={d.id}>
+                    <td style={{ fontFamily:'var(--mono)', fontSize:12 }}>
+                      <button style={{ background:'none', border:'none', cursor:'pointer', fontFamily:'var(--mono)', fontSize:12, color:'var(--teal)', textDecoration:'underline', padding:0 }}
+                        onClick={() => setSelectedDomain(selectedDomain===d.domain?null:d.domain)}>
+                        {d.domain}
+                      </button>
+                      {d.cert_private_key && <span style={{ marginLeft:6, fontSize:10, color:'var(--green)', fontFamily:'var(--sans)' }}>🔑</span>}
+                    </td>
+                    <td style={{ fontSize:12, color:'var(--text-3)' }}>{d.cert_start?new Date(d.cert_start).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'—'}</td>
+                    <td style={{ fontSize:12 }}>{d.cert_expiry?(<span style={{ fontWeight:600, color:new Date(d.cert_expiry)<new Date()?'var(--red)':new Date(d.cert_expiry)<new Date(Date.now()+30*86400000)?'var(--orange)':'var(--green)' }}>{new Date(d.cert_expiry).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}</span>):'—'}</td>
+                    <td>{d.last_days_left!=null?(<span style={{ fontWeight:700, color:d.last_days_left<0?'var(--red)':d.last_days_left<30?'var(--orange)':'var(--green)' }}>{d.last_days_left<0?'EXPIRED':d.last_days_left+'d'}</span>):<span style={{ color:'var(--text-4)' }}>—</span>}</td>
+                    <td><RiskBadge risk={d.last_risk_level} /></td>
+                    <td style={{ fontSize:12, fontFamily:'var(--mono)' }}>{d.last_algorithm||'—'}</td>
+                    <td>
+                      <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
+                        <button className="btn btn-ghost btn-sm" onClick={() => triggerScan(d.domain)} disabled={scanning[d.domain]}>{scanning[d.domain]?<span className="spinner"></span>:'🔄'}</button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => window.open('/?domain='+d.domain)}>🔍</button>
+                        <button className="btn btn-primary btn-sm"
+                          onClick={() => user ? requestCert(d.domain) : alert('Please sign in to request certificates')}
+                          disabled={certRequest[d.domain]?.loading}>🔒 Request Cert</button>
+                        {d.cert_revoked_at
+                          ? <span style={{ fontSize:11, color:'var(--red)', fontWeight:700 }}>🔴 Revoked</span>
+                          : <button className="btn btn-danger btn-sm" onClick={() => { setRevokeModal({ domain:d.domain, issuer:d.last_algorithm||'' }); setRevokeResult(null) }}>🔴 Revoke</button>
+                        }
+                        <button className="btn btn-danger btn-sm" onClick={() => removeDomain(d.id)}>✕</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            </div>
+          </>}
           {/* Inline cert request panels */}
           {domains.map(d => {
             const req = certRequest[d.domain]

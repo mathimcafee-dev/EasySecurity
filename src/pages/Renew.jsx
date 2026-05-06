@@ -160,9 +160,16 @@ export default function RenewWizard() {
                 <div className="output-box">{csr.key}<button className="copy-btn" onClick={() => navigator.clipboard.writeText(csr.key)}>Copy</button></div>
                 <button className="btn btn-secondary btn-sm" style={{ marginTop: 6 }} onClick={() => downloadText(csr.key, form.cn + '.key')}>⬇ Download .key</button>
               </div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+              <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap:'wrap' }}>
                 <button className="btn btn-secondary" onClick={() => setStep(0)}>← Back</button>
                 <button className="btn btn-primary" onClick={() => setStep(2)}>Next: Submit to CA →</button>
+                <button className="btn btn-primary" style={{ background:'linear-gradient(135deg,#059669,#047857)' }}
+                  onClick={() => {
+                    sessionStorage.setItem('ec_renew_domain', form.cn)
+                    window.location.href = '/free-ssl'
+                  }}>
+                  🔒 Get Free SSL via Let's Encrypt →
+                </button>
               </div>
             </>
           )}

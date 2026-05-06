@@ -19,7 +19,7 @@ export default function Navbar() {
             <rect x="10" y="10" width="6" height="6" rx="1.5" fill="white" opacity=".25"/>
           </svg>
         </div>
-        <span className="logo-text">EasyCerts</span>
+        <span className="logo-text">CertGuard</span>
         <span className="logo-badge">easysecurity.in</span>
       </a>
 

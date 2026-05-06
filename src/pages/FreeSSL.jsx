@@ -53,6 +53,12 @@ const DNS_GUIDES = {
 
 export default function FreeSSL() {
   const { user } = useAuth()
+
+  // Auto-fill domain from Renew wizard
+  useEffect(() => {
+    const d = sessionStorage.getItem('ec_renew_domain')
+    if (d) { setDomain(d); sessionStorage.removeItem('ec_renew_domain') }
+  }, [])
   const [step, setStep] = useState(0)
   const [domain, setDomain] = useState('')
   const [sessionId, setSessionId] = useState('')
