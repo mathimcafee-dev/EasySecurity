@@ -1,7 +1,7 @@
 import acme from 'acme-client'
 
 export const config = { api: { bodyParser: true } }
-export const maxDuration = 60
+
 
 const SUPABASE_URL = 'https://zwgdpsuvduexcdzcwjau.supabase.co'
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp3Z2Rwc3V2ZHVleGNkemN3amF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5NTkzMTMsImV4cCI6MjA5MzUzNTMxM30.p_tMALKCRZeqQX7jO3jfwhGSYIbjoVKRpGhvJjMdlcs'
